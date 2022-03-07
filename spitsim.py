@@ -56,7 +56,7 @@ def BootSpitfireSim():
   fail=0
   print("starting Sim")
   i = pexpect.spawn("it_helper_config --http_server_port "+httpport)
-  if(os.path.exists("vxr.out\/slurm.jobid")):
+  if(os.path.exists("vxr.out/slurm.jobid")):
      print("Prev Running instance detected")
      print("Cleaning previous instances....")
      command = "/auto/vxr/pyvxr/latest/vxr.py clean"
