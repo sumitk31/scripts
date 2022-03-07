@@ -43,7 +43,10 @@ i = pexpect.spawn("git checkout infra/appmgr/test/etc/spitfire-f.yaml")
 boot_golden = input("Boot Golden iso Y/N")
 golden_img = glob.glob( "output_isotools/8000-golden*.iso")
 if boot_golden=='Y':
-  i = pexpect.spawn("sed -i \'s|img-8000\/8000-x64\.iso|"+golden_img[0].strip()+"|g\' infra\/appmgr\/test\/etc\/spitfire-f\.yaml")
+  if(len(golden_img) == 0):
+    prRed("Golden ISO missing.. Continuing with normal iso")
+  else:
+    i = pexpect.spawn("sed -i \'s|img-8000\/8000-x64\.iso|"+golden_img[0].strip()+"|g\' infra\/appmgr\/test\/etc\/spitfire-f\.yaml")
 password=getpass.getpass("CEC Password")
 httpport = input("Enter http port for remote repo ")
 
@@ -53,16 +56,7 @@ def BootSpitfireSim():
   fail=0
   print("starting Sim")
   i = pexpect.spawn("it_helper_config --http_server_port "+httpport)
-  while True:
-   if (fail >0):
-     prRed("Auto Cleaning failed, Please try manual clean \'/auto/vxr/pyvxr/latest/vxr.py clean\'")
-     sys.exit(0)
-   try:
-     command = "/auto/vxr/pyvxr/latest/vxr.py start ./infra/appmgr/test/etc/spitfire-f.yaml"
-     child = pexpect.spawn(command,timeout=None)
-     child.logfile = open(logfile, "wb")
-     i = child.expect(['pexpect.exceptions.EOF'],timeout=10000)
-   except:
+  if(os.path.exists("vxr.out\/slurm.jobid")):
      print("Prev Running instance detected")
      print("Cleaning previous instances....")
      command = "/auto/vxr/pyvxr/latest/vxr.py clean"
@@ -70,13 +64,15 @@ def BootSpitfireSim():
      child.expect(['Releasing'],timeout=1000)
      time.sleep(60)
      print("Starting fresh instances....")
+  try:
      command = "/auto/vxr/pyvxr/latest/vxr.py start ./infra/appmgr/test/etc/spitfire-f.yaml"
      child = pexpect.spawn(command,timeout=None)
      child.logfile = open(logfile, "wb")
-     fail = fail+1
-   time.sleep(5)                             
-   i = child.expect(['Sim up'],timeout=5000)
-   if (i == 0):
+  except:
+       print("Exception")
+  time.sleep(5)                             
+  i = child.expect(['Sim up'],timeout=5000)
+  if (i == 0):
      print('Sim UP')
      flushedStuff=""
      child = pexpect.spawn('/bin/sh -c "/auto/vxr/pyvxr/latest/vxr.py ports > ports.json"')
@@ -166,7 +162,6 @@ install
      print(command)
      prRed("If nobackup doesn't mount please use below command")
      prGreen("sshfs "+user+"@"+MYADS+":/nobackup/"+user+" /nb -o reconnect,ServerAliveInterval=15,ServerAliveCountMax=3")
-     break
 
 def main():
   BootSpitfireSim()
