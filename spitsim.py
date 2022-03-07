@@ -89,12 +89,12 @@ def BootSpitfireSim():
 
      command = "telnet -l cisco "+str(host)+" "+str(serial0)
      child = pexpect.spawn(command,timeout=None,ignore_sighup=True)
-     child.logfile = open(logfile+"telnet", "wb")
      time.sleep(1)
      child.sendline("\r\n");
      child.expect(['CPU0:["-z]*#'],timeout=300)
      print("Setting up routes")
      #child.sendline("run ip netns exec xrnns bash")
+     child.sendline("run")
      time.sleep(1)
      #child.sendline("dhclient eth-mgmt")
      time.sleep(1)
@@ -124,30 +124,17 @@ def BootSpitfireSim():
      child.sendline('\r\n')
 
      time.sleep(3)
-     child.sendline('mkdir /misc/disk1/health')
-     time.sleep(1)
-     child.expect(['CPU0:'],timeout=1000)
-     cwd = os.getcwd()
-     inilist = [i for i in range(0, len(cwd)) if cwd[i:].startswith('/')]
-     ws=cwd[inilist[2]:len(cwd)]
      try:
       while not child.expect(r'.+', timeout=1):
        flushedStuff += str(child.match.group(0))
      except:
        pass
      print("Flushed"+flushedStuff)
-     hc_command= "cp /nb/"+ws+"/img-8000/optional-rpms/healthcheck/xr-healthcheck-*.* /misc/disk1/health/"
-     child.sendline(hc_command)
-     child.expect(['CPU0:'],timeout=1000)
 
      time.sleep(3)
      child.sendline('exit')
 
      time.sleep(3)
-     child.sendline('install source /misc/disk1/health/ all')
-     child.expect(['Continue'],timeout=300)
-     child.sendline('yes')
-     time.sleep(5)
 
      child.sendline('conf t')
      time.sleep(3)

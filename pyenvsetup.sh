@@ -26,7 +26,7 @@ eval "$(pyenv init -)"
 pyenv shell 3.8.0
 pip install pexpect
 cp ~sukala/spitsim.py ~/
-echo "alias lspitsim='python ~/spitsim.py simlog'">>~/.bashrc
+echo "alias lspitsim='python ~/scripts/spitsim.py simlog'">>~/.bashrc
 else
 echo "Exiting..."
 fi
