@@ -1,0 +1,16 @@
+#!/bin/bash
+mkdir $HOME/python-3
+cp /auto/tftp-blr-users4/sukala/tools/Python-3.6.1.tgz $HOME/python-3/
+cd $HOME/python-3
+tar -xvzf Python-3.6.1.tgz
+cd Python-3.6.1
+./configure --prefix=$HOME/python-3/
+make
+make install
+cd $HOME/python-3/bin/
+echo $PWD
+./pip3 install pexpect
+cd $HOME
+echo "alias python3='$HOME/python-3/bin/python3'" >> ~/.bashrc
+bash
+
