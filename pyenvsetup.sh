@@ -10,6 +10,7 @@ cd pyenv && src/configure && make -C src
 
 echo "export PYENV_ROOT=\"/nobackup/$USER/pyenv\"">>~/.bashrc
 echo "export PATH=\"\$PYENV_ROOT/bin:\$PATH\"">>~/.bashrc
+echo "export PATH=\"/auto/smartdev/bin/:\$PATH">>~/.bashrc
 #eval "$(pyenv init --path)"
 #eval "$(pyenv init -)"
 
