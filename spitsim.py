@@ -38,15 +38,17 @@ except:
     sys.exit(0);
 MYADS=socket.gethostbyname(socket.gethostname())
 user=os.getlogin()
-#revert back the config file before each run
-i = pexpect.spawn("git checkout infra/appmgr/test/etc/spitfire-f.yaml")
+revert_yaml = input("Revert back the sim config.yaml Y/N? Choose N if you have modifed the yaml")
+if revert_yaml == 'Y':
+  #revert back the config file before each run
+  i = pexpect.spawn("git checkout infra/appmgr/test/etc/spitfire-d.yaml")
 boot_golden = input("Boot Golden iso Y/N")
 golden_img = glob.glob( "output_isotools/8000-golden*.iso")
 if boot_golden=='Y':
   if(len(golden_img) == 0):
     prRed("Golden ISO missing.. Continuing with normal iso")
   else:
-    i = pexpect.spawn("sed -i \'s|img-8000\/8000-x64\.iso|"+golden_img[0].strip()+"|g\' infra\/appmgr\/test\/etc\/spitfire-f\.yaml")
+    i = pexpect.spawn("sed -i \'s|img-8000\/8000-x64\.iso|"+golden_img[0].strip()+"|g\' infra\/appmgr\/test\/etc\/spitfire-d\.yaml")
 password=getpass.getpass("CEC Password")
 httpport = input("Enter http port for remote repo ")
 
@@ -65,7 +67,7 @@ def BootSpitfireSim():
      time.sleep(60)
      print("Starting fresh instances....")
   try:
-     command = "/auto/vxr/pyvxr/latest/vxr.py start ./infra/appmgr/test/etc/spitfire-f.yaml"
+     command = "/auto/vxr/pyvxr/latest/vxr.py start ./infra/appmgr/test/etc/spitfire-d.yaml"
      child = pexpect.spawn(command,timeout=None)
      child.logfile = open(logfile, "wb")
   except:
