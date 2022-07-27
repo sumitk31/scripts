@@ -14,12 +14,13 @@ import getpass
 from os.path import exists, join
 from time import gmtime, strftime
 import threading
+from datetime import datetime
 import json
 def prRed(prt): print("\033[91m {}\033[00m" .format(prt))
 def prGreen(prt): print("\033[92m {}\033[00m" .format(prt))
 def prYellow(prt): print("\033[93m {}\033[00m" .format(prt))
 def prLightPurple(prt): print("\033[94m {}\033[00m" .format(prt))
-def prPurple(prt): print("\033[95m {}\033[00m" .format(prt))
+def prPurple(prt): print(datetime.now().strftime("%H:%M:%S")+"\033[95m {}\033[00m" .format(prt))
 def prCyan(prt): print("\033[96m {}\033[00m" .format(prt))
 def prLightGray(prt): print("\033[97m {}\033[00m" .format(prt))
 def prBlack(prt): print("\033[98m {}\033[00m" .format(prt))
@@ -38,69 +39,41 @@ except:
     sys.exit(0);
 MYADS=socket.gethostbyname(socket.gethostname())
 user=os.getlogin()
+yaml = ""
+platform= input("Choose 1)SFF 2)SFD 3) XRV9k")
+if platform == "1":
+    yaml = "spitfire-f.yaml"
+if platform == "2":
+    yaml = "spitfire-d.yaml"
+if platform == "3":
+    yaml = "xrv9k.yaml"
+
 revert_yaml = input("Revert back the sim config.yaml Y/N? Choose N if you have modifed the yaml")
 if revert_yaml == 'Y':
   #revert back the config file before each run
-  i = pexpect.spawn("git checkout infra/appmgr/test/etc/spitfire-d.yaml")
+  i = pexpect.spawn("git checkout infra/appmgr/test/etc/"+yaml)
 boot_golden = input("Boot Golden iso Y/N")
+if boot_golden=='Y':
+  build_golden = input("Generate the Golden ISO Y/N")
+  if build_golden == 'Y':
+    child = pexpect.spawn("/auto/ioxprojects13/lindt-giso/isotools.sh --iso img-8000/8000-x64.iso --label healthcheck --repo img-8000/optional-rpms/healthcheck/")
+    out = child.expect(['Further logs at','The specified output dir is not empty'],timeout=1000)
+    if out == 1:
+      prRed("Deleting existing GISO")
+      child = pexpect.spawn("rm -rf output_isotools/")
+      child = pexpect.spawn("/auto/ioxprojects13/lindt-giso/isotools.sh --iso img-8000/8000-x64.iso --label healthcheck --repo img-8000/optional-rpms/healthcheck/")
 golden_img = glob.glob( "output_isotools/8000-golden*.iso")
 if boot_golden=='Y':
   if(len(golden_img) == 0):
     prRed("Golden ISO missing.. Continuing with normal iso")
   else:
-    i = pexpect.spawn("sed -i \'s|img-8000\/8000-x64\.iso|"+golden_img[0].strip()+"|g\' infra\/appmgr\/test\/etc\/spitfire-d\.yaml")
+    i = pexpect.spawn("sed -i \'s|img-8000\/8000-x64\.iso|"+golden_img[0].strip()+"|g\' infra\/appmgr\/test\/etc\/"+yaml)
 password=getpass.getpass("CEC Password")
 httpport = input("Enter http port for remote repo ")
 
 # Arguments passed
 logfile = sys.argv[1]
-def BootSpitfireSim():
-  fail=0
-  print("starting Sim")
-  i = pexpect.spawn("it_helper_config --http_server_port "+httpport)
-  if(os.path.exists("vxr.out/slurm.jobid")):
-     print("Prev Running instance detected")
-     print("Cleaning previous instances....")
-     command = "/auto/vxr/pyvxr/latest/vxr.py clean"
-     child = pexpect.spawn(command,timeout=None)
-     child.expect(['Releasing'],timeout=1000)
-     time.sleep(60)
-     print("Starting fresh instances....")
-  try:
-     command = "/auto/vxr/pyvxr/latest/vxr.py start ./infra/appmgr/test/etc/spitfire-d.yaml"
-     child = pexpect.spawn(command,timeout=None)
-     child.logfile = open(logfile, "wb")
-  except:
-       print("Exception")
-  time.sleep(5)                             
-  i = child.expect(['Sim up'],timeout=5000)
-  if (i == 0):
-     print('Sim UP')
-     flushedStuff=""
-     child = pexpect.spawn('/bin/sh -c "/auto/vxr/pyvxr/latest/vxr.py ports > ports.json"')
-     time.sleep(10)
-     fo = open('ports.json')
-     data = json.load(fo)
-     host = data['R1']['HostAgent']
-     serial0 = data['R1']['serial0']
-     print("Connecting to " +str(host)+":"+str(serial0))
-
-     command = "telnet -l cisco "+str(host)+" "+str(serial0)
-     child = pexpect.spawn(command,timeout=None,ignore_sighup=True)
-     time.sleep(1)
-     child.sendline("\r\n");
-     child.expect(['CPU0:["-z]*#'],timeout=300)
-     print("Setting up routes")
-     #child.sendline("run ip netns exec xrnns bash")
-     child.sendline("run")
-     time.sleep(1)
-     #child.sendline("dhclient eth-mgmt")
-     time.sleep(1)
-     child.sendline("route add -host "+MYADS+" gw 192.168.122.1 eth-mgmt")
-     child.sendline("setenforce 0")
-     child.sendline("mkdir /nb")
-     print("Setting up nobackup mount")
-     time.sleep(3)
+def mount_nb_sf(child):
      while True:
        global password
        child.sendline("sshfs "+user+"@"+MYADS+":/nobackup/"+user+" /nb -o reconnect,ServerAliveInterval=15,ServerAliveCountMax=3 ")
@@ -116,6 +89,93 @@ def BootSpitfireSim():
          break
        else:
          break
+
+def mount_nb_xrv9k(child):
+     while True:
+       global password
+       child.sendline("exit")
+       ret = child.expect(['CPU0:'],timeout=10)
+       child.sendline("admin")
+       ret = child.expect(['sysadmin'],timeout=10)
+       child.sendline("run ssh 10.0.2.16")
+       ret = child.expect(['host'],timeout=10)
+       child.sendline("passwd")
+       ret = child.expect(['Enter new UNIX password:'],timeout=10)
+       child.sendline("cisco123")
+       ret = child.expect(['Retype new UNIX password:'],timeout=10)
+       child.sendline("cisco123")
+       ret = child.expect(['host'],timeout=10)
+       child.sendline("mkdir /nb")
+       child.sendline("sshfs "+user+"@"+MYADS+":/nobackup/"+user+ " /nb")
+       child.expect(['password'],timeout=10)
+       child.sendline(password)
+       child.expect(['host'],timeout=10)
+       child.sendline("exit")
+       ret = child.expect(['sysadmin'],timeout=10)
+       child.sendline("exit")
+       child.expect(['CPU0:'],timeout=100)
+       child.sendline("run")
+       pdb.set_trace()
+       child.sendline("sshfs 10.0.2.16:/nb /nb")
+       child.expect(['password'],timeout=300)
+       child.sendline("cisco123")
+       child.expect(['CPU0:'],timeout=100)
+       break
+
+
+def BootSpitfireSim():
+  fail=0
+
+  prPurple("starting Sim")
+  i = pexpect.spawn("it_helper_config --http_server_port "+httpport)
+  if(os.path.exists("vxr.out/slurm.jobid")):
+     prPurple("Prev Running instance detected")
+     prPurple("Cleaning previous instances....")
+     command = "/auto/vxr/pyvxr/latest/vxr.py clean"
+     child = pexpect.spawn(command,timeout=None)
+     child.expect(['Releasing'],timeout=1000)
+     time.sleep(60)
+     prPurple("Starting fresh instances....")
+  try:
+     global yaml
+     command = "/auto/vxr/pyvxr/latest/vxr.py start ./infra/appmgr/test/etc/"+yaml
+     child = pexpect.spawn(command,timeout=None)
+     child.logfile = open(logfile, "wb")
+  except:
+       prPurple("Exception")
+  time.sleep(5)                             
+  i = child.expect(['Sim up'],timeout=5000)
+  if (i == 0):
+     prPurple('Sim UP')
+     flushedStuff=""
+     child = pexpect.spawn('/bin/sh -c "/auto/vxr/pyvxr/latest/vxr.py ports > ports.json"')
+     time.sleep(10)
+     fo = open('ports.json')
+     data = json.load(fo)
+     host = data['R1']['HostAgent']
+     serial0 = data['R1']['serial0']
+     prPurple("Connecting to " +str(host)+":"+str(serial0))
+
+     command = "telnet -l cisco "+str(host)+" "+str(serial0)
+     child = pexpect.spawn(command,timeout=None,ignore_sighup=True)
+     time.sleep(1)
+     child.sendline("\r\n");
+     child.expect(['CPU0:["-z]*#'],timeout=300)
+     prPurple("Setting up routes")
+     #child.sendline("run ip netns exec xrnns bash")
+     child.sendline("run")
+     time.sleep(1)
+     #child.sendline("dhclient eth-mgmt")
+     time.sleep(1)
+     child.sendline("route add -host "+MYADS+" gw 192.168.122.1 eth-mgmt")
+     child.sendline("setenforce 0")
+     child.sendline("mkdir /nb")
+     prPurple("Setting up nobackup mount")
+     time.sleep(3)
+     if platform == "3":
+         mount_nb_xrv9k(child)
+     else:
+         mount_nb_sf(child)
      time.sleep(3)
      child.sendline('\r\n')
      child.sendline('\r\n')
@@ -127,7 +187,7 @@ def BootSpitfireSim():
        flushedStuff += str(child.match.group(0))
      except:
        pass
-     print("Flushed"+flushedStuff)
+     prPurple("Flushed"+flushedStuff)
 
      time.sleep(3)
      child.sendline('exit')
@@ -161,7 +221,7 @@ install
      child.sendline('show run interface MgmtEth 0/RP0/CPU0/0')
      child.sendline('exit')
      prGreen("Sim Is UP , login using below command")
-     print(command)
+     prGreen(command)
      prRed("If nobackup doesn't mount please use below command")
      prGreen("sshfs "+user+"@"+MYADS+":/nobackup/"+user+" /nb -o reconnect,ServerAliveInterval=15,ServerAliveCountMax=3")
 
