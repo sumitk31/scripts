@@ -40,46 +40,59 @@ except:
 MYADS=socket.gethostbyname(socket.gethostname())
 user=os.getlogin()
 yaml = ""
-platform= input("Choose 1)SFF 2)SFD 3) XRV9k")
-if platform == "1":
-    yaml = "spitfire-f.yaml"
-if platform == "2":
-    yaml = "spitfire-d.yaml"
-if platform == "3":
-    yaml = "xrv9k.yaml"
+httpport=""
+platform=""
+password=""
+start_time=int(datetime.now().strftime('%s'))
+def getUserInputs():
+    global yaml
+    global httpport 
+    global platform
+    platform= input("Choose 1)SFF 2)SFD 3) XRV9k")
+    if platform == "1":
+        yaml = "spitfire-f.yaml"
+    if platform == "2":
+        yaml = "spitfire-d.yaml"
+    if platform == "3":
+        yaml = "xrv9k.yaml"
 
-revert_yaml = input("Revert back the sim config.yaml Y/N? Choose N if you have modifed the yaml")
-if revert_yaml == 'Y':
-  #revert back the config file before each run
-  i = pexpect.spawn("git checkout infra/appmgr/test/etc/"+yaml)
-boot_golden = input("Boot Golden iso Y/N")
-if boot_golden=='Y':
-  build_golden = input("Generate the Golden ISO Y/N")
-  if build_golden == 'Y':
-    child = pexpect.spawn("/auto/ioxprojects13/lindt-giso/isotools.sh --iso img-8000/8000-x64.iso --label healthcheck --repo img-8000/optional-rpms/healthcheck/")
-    out = child.expect(['Further logs at','The specified output dir is not empty'],timeout=1000)
-    if out == 1:
-      prRed("Deleting existing GISO")
-      child = pexpect.spawn("rm -rf output_isotools/")
-      child = pexpect.spawn("/auto/ioxprojects13/lindt-giso/isotools.sh --iso img-8000/8000-x64.iso --label healthcheck --repo img-8000/optional-rpms/healthcheck/")
-golden_img = glob.glob( "output_isotools/8000-golden*.iso")
-if boot_golden=='Y':
-  if(len(golden_img) == 0):
-    prRed("Golden ISO missing.. Continuing with normal iso")
-  else:
-    i = pexpect.spawn("sed -i \'s|img-8000\/8000-x64\.iso|"+golden_img[0].strip()+"|g\' infra\/appmgr\/test\/etc\/"+yaml)
-password=getpass.getpass("CEC Password")
-httpport = input("Enter http port for remote repo ")
+    revert_yaml = input("Revert back the sim config.yaml Y/N? Choose N if you have modifed the yaml")
+    if revert_yaml == 'Y':
+      #revert back the config file before each run
+      i = pexpect.spawn("git checkout infra/appmgr/test/etc/"+yaml)
+    boot_golden = input("Boot Golden iso Y/N")
+    if boot_golden=='Y':
+      build_golden = input("Generate the Golden ISO Y/N")
+      if build_golden == 'Y':
+        child = pexpect.spawn("/auto/ioxprojects13/lindt-giso/isotools.sh --iso img-8000/8000-x64.iso --label healthcheck --repo img-8000/optional-rpms/healthcheck/")
+        out = child.expect(['Further logs at','The specified output dir is not empty'],timeout=1000)
+        if out == 1:
+          prRed("Deleting existing GISO")
+          child = pexpect.spawn("rm -rf output_isotools/")
+          child = pexpect.spawn("/auto/ioxprojects13/lindt-giso/isotools.sh --iso img-8000/8000-x64.iso --label healthcheck --repo img-8000/optional-rpms/healthcheck/")
+          out = child.expect(['Further logs at','The specified output dir is not empty'],timeout=1000)
+    golden_img = glob.glob( "output_isotools/8000-golden*.iso")
+    if boot_golden=='Y':
+      if(len(golden_img) == 0):
+        prRed("Golden ISO missing.. Continuing with normal iso")
+      else:
+        i = pexpect.spawn("sed -i \'s|img-8000\/8000-x64\.iso|"+golden_img[0].strip()+"|g\' infra\/appmgr\/test\/etc\/"+yaml)
+    password=getpass.getpass("CEC Password")
+    httpport = input("Enter http port for remote repo ")
 
-# Arguments passed
+    # Arguments passed
 logfile = sys.argv[1]
 def mount_nb_sf(child):
      while True:
        global password
        child.sendline("sshfs "+user+"@"+MYADS+":/nobackup/"+user+" /nb -o reconnect,ServerAliveInterval=15,ServerAliveCountMax=3 ")
-       child.expect(['Are you sure'],timeout=300)
-       child.sendline('yes')
-       child.expect(['password'],timeout=300)
+       try:
+         child.expect(['Are you sure'],timeout=60)
+         child.sendline('yes')
+         child.expect(['password'],timeout=600)
+       except:
+         prRed("sshfs to ADS failed check connectivity to ADS")
+         return
        child.sendline(password)
        ret = child.expect(['CPU0:','password'],timeout=10)
        if ret==1:
@@ -122,10 +135,33 @@ def mount_nb_xrv9k(child):
        child.expect(['CPU0:'],timeout=100)
        break
 
+def storeUserInput():
+  global httpport
+  global platform
+  global yaml
+  global start_time
+  dictionary = {'httpport':httpport,'yaml':yaml,'platform':platform,'start_time':start_time}
+  with open("sim_user_input.json", "w") as outfile:
+    json.dump(dictionary, outfile)
 
+def loadUserInput(read_ts):
+  global httpport
+  global platform
+  global yaml
+  global start_time
+  with open("sim_user_input.json", "r") as infile:
+    dictionary = json.load(infile)
+    httpport = dictionary['httpport']
+    platform = dictionary['platform']
+    yaml = dictionary['yaml']
+    if read_ts == True:
+      start_time = int(dictionary['start_time'])
 def BootSpitfireSim():
   fail=0
-
+  global httpport
+  global platform
+  global yaml
+  global start_time
   prPurple("starting Sim")
   i = pexpect.spawn("it_helper_config --http_server_port "+httpport)
   if(os.path.exists("vxr.out/slurm.jobid")):
@@ -137,14 +173,14 @@ def BootSpitfireSim():
      time.sleep(60)
      prPurple("Starting fresh instances....")
   try:
-     global yaml
      command = "/auto/vxr/pyvxr/latest/vxr.py start ./infra/appmgr/test/etc/"+yaml
      child = pexpect.spawn(command,timeout=None)
      child.logfile = open(logfile, "wb")
   except:
        prPurple("Exception")
   time.sleep(5)                             
-  i = child.expect(['Sim up'],timeout=5000)
+  i = child.expect(['Sim up'],timeout=1800)
+  start_time=int(datetime.now().strftime('%s'))
   if (i == 0):
      prPurple('Sim UP')
      flushedStuff=""
@@ -220,13 +256,62 @@ install
      time.sleep(2)
      child.sendline('show run interface MgmtEth 0/RP0/CPU0/0')
      child.sendline('exit')
+     child.sendline('\r\n')
      prGreen("Sim Is UP , login using below command")
      prGreen(command)
      prRed("If nobackup doesn't mount please use below command")
      prGreen("sshfs "+user+"@"+MYADS+":/nobackup/"+user+" /nb -o reconnect,ServerAliveInterval=15,ServerAliveCountMax=3")
+     child.sendline('^]')
+     child.sendline('q')
+     child.sendline('\r\n')
+     child.sendline('\r\n')
+     child.close()
+     start_time = int(datetime.now().strftime('%s'))
+     storeUserInput()
+
+def checkSim(takeUserInput):
+     command = "/auto/vxr/pyvxr/latest/vxr.py status"
+     out =""
+     try:
+       child1 = pexpect.spawn(command,timeout=None)
+       out = child1.expect(['\nDidn\'t find a valid','vxr-'],timeout=300)
+     except KeyboardInterrupt:
+         print("\nInterrupted")
+         sys.exit(0)
+     except:
+          print("\nSim not found.Starting again")
+          if(takeUserInput == True):
+              getUserInputs()
+          BootSpitfireSim()
+     else:
+       if out == 1:
+        status = child1.read()
+        if 'ended' in status.decode("utf-8") or 'unknown' in status.decode("utf-8") or 'not running' in status.decode("utf-8"):
+          print("\nSim ended.Starting again")
+          if(takeUserInput == True):
+              getUserInputs()
+          BootSpitfireSim()
+        elif 'running' in status.decode("utf-8"):
+          loadUserInput(takeUserInput)
+          curr_time = int(datetime.now().strftime('%s'))
+          duration = curr_time - start_time
+          hours = divmod(duration,3600)[0]
+          mins = int(divmod(duration,3600)[1]/60)
+          print("Sim running in current ws for "+str(hours)+" hours "+str(mins)+" mins",end ='\r')
+
+     if out == 0:
+          print("VXR Sim not found.Starting again")
+          if(takeUserInput == True):
+              getUserInputs()
+          BootSpitfireSim()
+
 
 def main():
-  BootSpitfireSim()
+     print("Checking for running instance....")
+     checkSim(True)
+     while True:
+         time.sleep(100)
+         checkSim(False)
 
 if __name__ == '__main__':
     main()
