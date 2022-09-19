@@ -48,6 +48,7 @@ def getUserInputs():
     global yaml
     global httpport 
     global platform
+    global password
     platform= input("Choose 1)SFF 2)SFD 3) XRV9k")
     if platform == "1":
         yaml = "spitfire-f.yaml"
@@ -223,7 +224,6 @@ def BootSpitfireSim():
        flushedStuff += str(child.match.group(0))
      except:
        pass
-     prPurple("Flushed"+flushedStuff)
 
      time.sleep(3)
      child.sendline('exit')
