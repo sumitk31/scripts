@@ -65,14 +65,23 @@ def getUserInputs():
     if boot_golden=='Y':
       build_golden = input("Generate the Golden ISO Y/N")
       if build_golden == 'Y':
-        child = pexpect.spawn("/auto/ioxprojects13/lindt-giso/isotools.sh --iso img-8000/8000-x64.iso --label healthcheck --repo img-8000/optional-rpms/healthcheck/")
-        out = child.expect(['Further logs at','The specified output dir is not empty'],timeout=1000)
+        child = pexpect.spawn("rm -rf /nobackup/"+user+"/ihc_sb")
+        time.sleep(1)
+        child = pexpect.spawn("mkdir /nobackup/"+user+"/hc_sb")
+        time.sleep(1)
+        os.system("cp img-8000/optional-rpms/healthcheck/*.rpm /nobackup/"+user+"/hc_sb/")
+        os.system("cp img-8000/optional-rpms/sandbox/*.rpm /nobackup/"+user+"/hc_sb/")
+        time.sleep(1)
+        child = pexpect.spawn("/auto/ioxprojects13/lindt-giso/isotools.sh --clean --iso img-8000/8000-x64.iso --label healthcheck --repo /nobackup/"+user+"/hc_sb/ --pkglist xr-healthcheck xr-sandbox")
+        out = child.expect(['Checksums OK','The specified output dir is not empty'],timeout=1000)
         if out == 1:
           prRed("Deleting existing GISO")
-          child = pexpect.spawn("rm -rf output_isotools/")
-          child = pexpect.spawn("/auto/ioxprojects13/lindt-giso/isotools.sh --iso img-8000/8000-x64.iso --label healthcheck --repo img-8000/optional-rpms/healthcheck/")
-          out = child.expect(['Further logs at','The specified output dir is not empty'],timeout=1000)
-    golden_img = glob.glob( "output_isotools/8000-golden*.iso")
+          child = pexpect.spawn("rm -rf output_gisobuild/")
+          time.sleep(1)
+          child = pexpect.spawn("/auto/ioxprojects13/lindt-giso/isotools.sh --iso img-8000/8000-x64.iso --label healthcheck --repo /nobackup/"+user+"/hc_sb/ --pkglist xr-healthcheck xr-sandbox")
+          out = child.expect(['Checksums OK','The specified output dir is not empty'],timeout=1000)
+          time.sleep(15)
+    golden_img = glob.glob( "output_gisobuild/giso/8000-golden*.iso")
     if boot_golden=='Y':
       if(len(golden_img) == 0):
         prRed("Golden ISO missing.. Continuing with normal iso")
@@ -129,7 +138,6 @@ def mount_nb_xrv9k(child):
        child.sendline("exit")
        child.expect(['CPU0:'],timeout=100)
        child.sendline("run")
-       pdb.set_trace()
        child.sendline("sshfs 10.0.2.16:/nb /nb")
        child.expect(['password'],timeout=300)
        child.sendline("cisco123")
@@ -205,7 +213,7 @@ def BootSpitfireSim():
      #child.sendline("dhclient eth-mgmt")
      time.sleep(1)
      child.sendline("route add -host "+MYADS+" gw 192.168.122.1 eth-mgmt")
-     child.sendline("setenforce 0")
+     #child.sendline("setenforce 0")
      child.sendline("mkdir /nb")
      prPurple("Setting up nobackup mount")
      time.sleep(3)
@@ -297,7 +305,7 @@ def checkSim(takeUserInput):
           duration = curr_time - start_time
           hours = divmod(duration,3600)[0]
           mins = int(divmod(duration,3600)[1]/60)
-          print("Sim running in current ws for "+str(hours)+" hours "+str(mins)+" mins",end ='\r')
+          print("Sim running in current ws for "+str(hours)+" hours "+str(mins)+" mins.",end ='\r')
 
      if out == 0:
           print("VXR Sim not found.Starting again")
