@@ -61,11 +61,13 @@ def getUserInputs():
     if revert_yaml == 'Y':
       #revert back the config file before each run
       i = pexpect.spawn("git checkout infra/appmgr/test/etc/"+yaml)
+    password=getpass.getpass("CEC Password")
+    httpport = input("Enter http port for remote repo ")
     boot_golden = input("Boot Golden iso Y/N")
     if boot_golden=='Y':
       build_golden = input("Generate the Golden ISO Y/N")
       if build_golden == 'Y':
-        child = pexpect.spawn("rm -rf /nobackup/"+user+"/ihc_sb")
+        child = pexpect.spawn("rm -rf /nobackup/"+user+"/hc_sb")
         time.sleep(1)
         child = pexpect.spawn("mkdir /nobackup/"+user+"/hc_sb")
         time.sleep(1)
@@ -87,8 +89,6 @@ def getUserInputs():
         prRed("Golden ISO missing.. Continuing with normal iso")
       else:
         i = pexpect.spawn("sed -i \'s|img-8000\/8000-x64\.iso|"+golden_img[0].strip()+"|g\' infra\/appmgr\/test\/etc\/"+yaml)
-    password=getpass.getpass("CEC Password")
-    httpport = input("Enter http port for remote repo ")
 
     # Arguments passed
 logfile = sys.argv[1]
@@ -97,9 +97,10 @@ def mount_nb_sf(child):
        global password
        child.sendline("sshfs "+user+"@"+MYADS+":/nobackup/"+user+" /nb -o reconnect,ServerAliveInterval=15,ServerAliveCountMax=3 ")
        try:
-         child.expect(['Are you sure'],timeout=60)
-         child.sendline('yes')
-         child.expect(['password'],timeout=600)
+         ret = child.expect(['Are you sure','password'],timeout=60)
+         if ret == 0:
+           child.sendline('yes')
+           child.expect(['password'],timeout=60)
        except:
          prRed("sshfs to ADS failed check connectivity to ADS")
          return
@@ -180,6 +181,7 @@ def BootSpitfireSim():
      child = pexpect.spawn(command,timeout=None)
      child.expect(['Releasing'],timeout=1000)
      time.sleep(60)
+     child = pexpect.spawn("rm -rf vxr.out", timeout=None)
      prPurple("Starting fresh instances....")
   try:
      command = "/auto/vxr/pyvxr/latest/vxr.py start ./infra/appmgr/test/etc/"+yaml
@@ -207,37 +209,6 @@ def BootSpitfireSim():
      child.sendline("\r\n");
      child.expect(['CPU0:["-z]*#'],timeout=300)
      prPurple("Setting up routes")
-     #child.sendline("run ip netns exec xrnns bash")
-     child.sendline("run")
-     time.sleep(1)
-     #child.sendline("dhclient eth-mgmt")
-     time.sleep(1)
-     child.sendline("route add -host "+MYADS+" gw 192.168.122.1 eth-mgmt")
-     #child.sendline("setenforce 0")
-     child.sendline("mkdir /nb")
-     prPurple("Setting up nobackup mount")
-     time.sleep(3)
-     if platform == "3":
-         mount_nb_xrv9k(child)
-     else:
-         mount_nb_sf(child)
-     time.sleep(3)
-     child.sendline('\r\n')
-     child.sendline('\r\n')
-     child.sendline('\r\n')
-
-     time.sleep(3)
-     try:
-      while not child.expect(r'.+', timeout=1):
-       flushedStuff += str(child.match.group(0))
-     except:
-       pass
-
-     time.sleep(3)
-     child.sendline('exit')
-
-     time.sleep(3)
-
      child.sendline('conf t')
      time.sleep(3)
      child.sendline('root')
@@ -261,6 +232,32 @@ install
      time.sleep(3)
      child.sendline('commit')
      child.sendline('end')
+     #child.sendline("run ip netns exec xrnns bash")
+     child.sendline("run")
+     #child.sendline("dhclient eth-mgmt")
+     time.sleep(1)
+     child.sendline("route add -host "+MYADS+" gw 192.168.122.1 eth-mgmt")
+     #pdb.set_trace()
+     #child.sendline("setenforce 0")
+     prPurple("Setting up nobackup mount")
+     child.sendline("mkdir /nb")
+     
+     if platform == "3":
+         mount_nb_xrv9k(child)
+     else:
+         mount_nb_sf(child)
+     time.sleep(3)
+     child.sendline('\r\n')
+     child.sendline('\r\n')
+     child.sendline('\r\n')
+
+     try:
+      while not child.expect(r'.+', timeout=1):
+       flushedStuff += str(child.match.group(0))
+     except:
+       pass
+
+     child.sendline('exit')
      time.sleep(2)
      child.sendline('show run interface MgmtEth 0/RP0/CPU0/0')
      child.sendline('exit')
@@ -306,6 +303,20 @@ def checkSim(takeUserInput):
           hours = divmod(duration,3600)[0]
           mins = int(divmod(duration,3600)[1]/60)
           print("Sim running in current ws for "+str(hours)+" hours "+str(mins)+" mins.",end ='\r')
+          if (takeUserInput == True):
+            relaunch = input("Kill Current Simulation and launch new Y/N?   ")
+            if (relaunch == "Y"):
+              getUserInputs()
+              BootSpitfireSim()
+            else :
+              child = pexpect.spawn('/bin/sh -c "/auto/vxr/pyvxr/latest/vxr.py ports > ports.json"')
+              fo = open('ports.json')
+              data = json.load(fo)
+              host = data['R1']['HostAgent']
+              serial0 = data['R1']['serial0']
+              prPurple("Connect to existing Sim using telnet " +str(host)+" "+str(serial0))
+              sys.exit(0)
+
 
      if out == 0:
           print("VXR Sim not found.Starting again")
