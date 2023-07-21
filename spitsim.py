@@ -15,14 +15,15 @@ from os.path import exists, join
 from time import gmtime, strftime
 import threading
 from datetime import datetime
+from datetime import timezone
 import json
-def prRed(prt): print("\033[91m {}\033[00m" .format(prt))
-def prGreen(prt): print("\033[92m {}\033[00m" .format(prt))
+def prRed(prt): print(datetime.now().strftime("%d-%m-%Y %H:%M:%S")+"\033[91m {}\033[00m" .format(prt))
+def prGreen(prt): print(datetime.now().strftime("%d-%m-%Y %H:%M:%S")+"\033[92m {}\033[00m" .format(prt))
 def prYellow(prt): print("\033[93m {}\033[00m" .format(prt))
 def prLightPurple(prt): print("\033[94m {}\033[00m" .format(prt))
-def prPurple(prt): print(datetime.now().strftime("%H:%M:%S")+"\033[95m {}\033[00m" .format(prt))
+def prPurple(prt): print(datetime.now().strftime("%d-%m-%Y %H:%M:%S")+"\033[95m {}\033[00m" .format(prt))
 def prCyan(prt): print("\033[96m {}\033[00m" .format(prt))
-def prLightGray(prt): print("\033[97m {}\033[00m" .format(prt))
+def prLightGray(prt): print(datetime.now().strftime("%d-%m-%Y %H:%M:%S")+"\033[97m {}\033[00m" .format(prt))
 def prBlack(prt): print("\033[98m {}\033[00m" .format(prt))
 # total arguments
 n = len(sys.argv)
@@ -43,12 +44,70 @@ yaml = ""
 httpport=""
 platform=""
 password=""
+boot_golden=""
+build_golden=""
+ws_upd_notified="N"
 start_time=int(datetime.now().strftime('%s'))
+auto_upd = ""
+def generateGiso():
+    child = pexpect.spawn("rm -rf ./hc_sb")
+    time.sleep(1)
+    child = pexpect.spawn("mkdir ./hc_sb")
+    time.sleep(1)
+    os.system("cp img-8000/optional-rpms/healthcheck/*.rpm ./hc_sb/")
+    os.system("cp img-8000/optional-rpms/sandbox/*.rpm ./hc_sb/")
+    time.sleep(1)
+    child = pexpect.spawn("/auto/ioxprojects13/lindt-giso/isotools.sh --clean --iso img-8000/8000-x64.iso --label healthcheck --repo ./hc_sb/ --pkglist xr-healthcheck xr-sandbox")
+    out = child.expect(['Checksums OK','The specified output dir is not empty'],timeout=1000)
+    if out == 1:
+      prRed("Deleting existing GISO")
+      child = pexpect.spawn("rm -rf output_gisobuild/")
+      time.sleep(1)
+      prGreen("Generating Golden ISO")
+      child = pexpect.spawn("/auto/ioxprojects13/lindt-giso/isotools.sh --iso img-8000/8000-x64.iso --label healthcheck --repo ./hc_sb/ --pkglist xr-healthcheck xr-sandbox")
+      out = child.expect(['Checksums OK','The specified output dir is not empty'],timeout=1000)
+      time.sleep(15)
+    if boot_golden=='Y':
+      golden_img = glob.glob( "output_gisobuild/giso/8000-golden*.iso")
+      if(len(golden_img) == 0):
+        prRed("Golden ISO missing.. Continuing with normal iso")
+      else:
+        i = pexpect.spawn("sed -i \'s|img-8000\/8000-x64\.iso|"+golden_img[0].strip()+"|g\' infra\/appmgr\/test\/etc\/"+yaml)
+
+
+
+def pullWorkSpaceAndBuild(platform):
+    command="git clone git@gh-xr.scm.engit.cisco.com:xr/iosxr.git"
+    #command="git clone https://github.com/sumitk31/scripts.git"
+    process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE)
+    process.wait()
+    os.chdir("iosxr")
+    if platform in ["1","2"]:
+      plat = "8000"
+    elif plat == "3":
+      plat = "xrv9k"
+    else :
+      prLightGray("Invalid Platform")
+      sys.exit(0)
+    buildcmd = "tools/misc/xr_bld -plat "+ plat
+    prGreen("Starting XR-build")
+    process = subprocess.Popen(buildcmd, shell=True, stdout=subprocess.PIPE)
+    process.wait()
+    prLightGray( process.returncode)
+    if build_golden == "Y":
+      generateGiso()
+
 def getUserInputs():
     global yaml
     global httpport 
     global platform
     global password
+    global auto_upd
+    global boot_golden
+    global build_golden
+    pullws = input("Do you want to pull a WS Y/N ?")
+    auto_upd = input("Do you want to Auto Upgrade WS every week  Y/N ?")
+
     platform= input("Choose 1)SFF 2)SFD 3) XRV9k")
     if platform == "1":
         yaml = "spitfire-f.yaml"
@@ -63,33 +122,15 @@ def getUserInputs():
       i = pexpect.spawn("git checkout infra/appmgr/test/etc/"+yaml)
     password=getpass.getpass("CEC Password")
     httpport = input("Enter http port for remote repo ")
+    
+   
     boot_golden = input("Boot Golden iso Y/N")
     if boot_golden=='Y':
       build_golden = input("Generate the Golden ISO Y/N")
-      if build_golden == 'Y':
-        child = pexpect.spawn("rm -rf /nobackup/"+user+"/hc_sb")
-        time.sleep(1)
-        child = pexpect.spawn("mkdir /nobackup/"+user+"/hc_sb")
-        time.sleep(1)
-        os.system("cp img-8000/optional-rpms/healthcheck/*.rpm /nobackup/"+user+"/hc_sb/")
-        os.system("cp img-8000/optional-rpms/sandbox/*.rpm /nobackup/"+user+"/hc_sb/")
-        time.sleep(1)
-        child = pexpect.spawn("/auto/ioxprojects13/lindt-giso/isotools.sh --clean --iso img-8000/8000-x64.iso --label healthcheck --repo /nobackup/"+user+"/hc_sb/ --pkglist xr-healthcheck xr-sandbox")
-        out = child.expect(['Checksums OK','The specified output dir is not empty'],timeout=1000)
-        if out == 1:
-          prRed("Deleting existing GISO")
-          child = pexpect.spawn("rm -rf output_gisobuild/")
-          time.sleep(1)
-          child = pexpect.spawn("/auto/ioxprojects13/lindt-giso/isotools.sh --iso img-8000/8000-x64.iso --label healthcheck --repo /nobackup/"+user+"/hc_sb/ --pkglist xr-healthcheck xr-sandbox")
-          out = child.expect(['Checksums OK','The specified output dir is not empty'],timeout=1000)
-          time.sleep(15)
-    golden_img = glob.glob( "output_gisobuild/giso/8000-golden*.iso")
-    if boot_golden=='Y':
-      if(len(golden_img) == 0):
-        prRed("Golden ISO missing.. Continuing with normal iso")
-      else:
-        i = pexpect.spawn("sed -i \'s|img-8000\/8000-x64\.iso|"+golden_img[0].strip()+"|g\' infra\/appmgr\/test\/etc\/"+yaml)
-
+    if pullws == "Y":
+      pullWorkSpaceAndBuild(platform)
+    if boot_golden == 'Y' and build_golden == 'Y':
+        generateGiso()
     # Arguments passed
 logfile = sys.argv[1]
 def mount_nb_sf(child):
@@ -173,6 +214,7 @@ def BootSpitfireSim():
   global yaml
   global start_time
   prPurple("starting Sim")
+  storeUserInput()
   i = pexpect.spawn("it_helper_config --http_server_port "+httpport)
   if(os.path.exists("vxr.out/slurm.jobid")):
      prPurple("Prev Running instance detected")
@@ -272,7 +314,6 @@ install
      child.sendline('\r\n')
      child.close()
      start_time = int(datetime.now().strftime('%s'))
-     storeUserInput()
 
 def checkSim(takeUserInput):
      command = "/auto/vxr/pyvxr/latest/vxr.py status"
@@ -281,10 +322,10 @@ def checkSim(takeUserInput):
        child1 = pexpect.spawn(command,timeout=None)
        out = child1.expect(['\nDidn\'t find a valid','vxr-'],timeout=300)
      except KeyboardInterrupt:
-         print("\nInterrupted")
+         prLightGray("\nInterrupted")
          sys.exit(0)
      except:
-          print("\nSim not found.Starting again")
+          prLightGray("\nSim not found.Starting again")
           if(takeUserInput == True):
               getUserInputs()
           BootSpitfireSim()
@@ -292,7 +333,7 @@ def checkSim(takeUserInput):
        if out == 1:
         status = child1.read()
         if 'ended' in status.decode("utf-8") or 'unknown' in status.decode("utf-8") or 'not running' in status.decode("utf-8"):
-          print("\nSim ended.Starting again")
+          prLightGray("\nSim ended.Starting again")
           if(takeUserInput == True):
               getUserInputs()
           BootSpitfireSim()
@@ -309,27 +350,61 @@ def checkSim(takeUserInput):
               getUserInputs()
               BootSpitfireSim()
             else :
-              child = pexpect.spawn('/bin/sh -c "/auto/vxr/pyvxr/latest/vxr.py ports > ports.json"')
+              #child = pexpect.spawn('/bin/sh -c "/auto/vxr/pyvxr/latest/vxr.py ports > ports.json"')
+              #time.sleep(10)
+              command="/auto/vxr/pyvxr/latest/vxr.py ports > ports.json"
+              process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE)
+              process.wait()
               fo = open('ports.json')
               data = json.load(fo)
               host = data['R1']['HostAgent']
               serial0 = data['R1']['serial0']
               prPurple("Connect to existing Sim using telnet " +str(host)+" "+str(serial0))
-              sys.exit(0)
+              #sys.exit(0)
 
 
      if out == 0:
-          print("VXR Sim not found.Starting again")
+          prLightGray("VXR Sim not found.Starting again")
           if(takeUserInput == True):
               getUserInputs()
           BootSpitfireSim()
 
+def CheckAndUpgradeWS():
+    global ws_upd_notified
+    d1 = os.popen("git log -1 --format=%cd")
+    d1str=d1.read()
+    d1 = datetime.strptime(d1str,"%a %b %d %H:%M:%S %Y %z\n")
+    d2 = datetime.now(timezone.utc)
+    if(auto_upd == 'Y' and (d2-d1).days >= 6 and ws_upd_notified=="N"):
+     ws_upd_notified="Y"
+     process = subprocess.Popen("echo "'WS will auto upgrade in 1 day ' " | mail -s 'Upgrade Scheduled' "+user+"@cisco.com",shell=True)
+     process.wait()
+    if(auto_upd == 'Y' and (d2-d1).days >= 7):
+        prRed("Current WS EFR is " +str((d2-d1).days)+" days old upgrading")
+        loadUserInput(False)
+        prGreen("Collecting diff and storing to TFTP\n");
+        command="git diff > $TFTP/"+(d2.strftime("%m_%d_%Y")+".diff")
+        process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE)
+        process.wait()
+        command="/auto/vxr/pyvxr/latest/vxr.py stop"
+        process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE)
+        process.wait()
+        process = subprocess.Popen("lcleanup --killprocs; lcleanup --unmount; lcleanup --mqueues; lcleanup --deletews", shell=True, stdout=subprocess.PIPE, executable='/bin/bash')
+        process.wait()
+        os.chdir("..")
+        pullWorkSpaceAndBuild(platform)
+        #sys.exit(0)
+
+
+
 
 def main():
-     print("Checking for running instance....")
+     prLightGray("Checking for running instance....")
+     # CheckAndUpgradeWS()
      checkSim(True)
      while True:
-         time.sleep(100)
+         time.sleep(60)
+         CheckAndUpgradeWS()
          checkSim(False)
 
 if __name__ == '__main__':
