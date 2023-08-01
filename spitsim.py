@@ -277,8 +277,9 @@ def BootSpitfireSim():
      data = json.load(fo)
      host = data['R1']['HostAgent']
      serial0 = data['R1']['serial0']
-     spi_gui_ip = data['tgn_gui']['SimLocalIp']
-     spi_gui_port = data['tgn_gui']['redir3389']
+     if spirent_topo.upper() == 'Y':
+       spi_gui_ip = data['tgn_gui']['SimLocalIp']
+       spi_gui_port = data['tgn_gui']['redir3389']
      prPurple("Connecting to " +str(host)+":"+str(serial0))
 
      command = "telnet -l cisco "+str(host)+" "+str(serial0)
@@ -354,9 +355,10 @@ interface HundredGigE0/0/0/4
      prGreen(command)
      prRed("If nobackup doesn't mount please use below command")
      prGreen("sshfs "+user+"@"+MYADS+":/nobackup/"+user+" /nb -o reconnect,ServerAliveInterval=15,ServerAliveCountMax=3")
-     prGreen("Spirent RD Details "+spi_gui_ip+":"+str(spi_gui_port))
-     prGreen("Spirent user-id vxr-ixia-pc\vxr-ixia Password <blank> ")
-     prGreen("Connections 1/1<-------------> HUndredGigE 0/0/0/0 , 1/2 <--------------> HUndredGigE 0/0/0/4")
+     if spirent_topo.upper() == 'Y':
+       prGreen("Spirent RD Details "+spi_gui_ip+":"+str(spi_gui_port))
+       prGreen("Spirent user-id vxr-ixia-pc\vxr-ixia Password <blank> ")
+       prGreen("Connections 1/1<-------------> HUndredGigE 0/0/0/0 , 1/2 <--------------> HUndredGigE 0/0/0/4")
      child.sendline('^]')
      child.sendline('q')
      child.sendline('\r\n')
