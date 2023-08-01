@@ -46,6 +46,7 @@ platform=""
 password=""
 boot_golden=""
 build_golden=""
+spirent_topo=""
 ws_upd_notified="N"
 start_time=int(datetime.now().strftime('%s'))
 auto_upd = ""
@@ -84,7 +85,7 @@ def pullWorkSpaceAndBuild(platform):
     os.chdir("iosxr")
     if platform in ["1","2"]:
       plat = "8000"
-    elif plat == "3":
+    elif platform == "3":
       plat = "xrv9k"
     else :
       prLightGray("Invalid Platform")
@@ -105,16 +106,21 @@ def getUserInputs():
     global auto_upd
     global boot_golden
     global build_golden
+    global spirent_topo
     pullws = input("Do you want to pull a WS Y/N ?")
     auto_upd = input("Do you want to Auto Upgrade WS every week  Y/N ?")
 
     platform= input("Choose 1)SFF 2)SFD 3) XRV9k")
     if platform == "1":
         yaml = "spitfire-f.yaml"
-    if platform == "2":
+    elif platform == "2":
         yaml = "spitfire-d.yaml"
-    if platform == "3":
+    elif platform == "3":
         yaml = "xrv9k.yaml"
+    else :
+        prRed("Wrong Input")
+        sys.exit(0)
+
 
     revert_yaml = input("Revert back the sim config.yaml Y/N? Choose N if you have modifed the yaml")
     if revert_yaml == 'Y':
@@ -124,13 +130,41 @@ def getUserInputs():
     httpport = input("Enter http port for remote repo ")
     
    
-    boot_golden = input("Boot Golden iso Y/N")
-    if boot_golden=='Y':
-      build_golden = input("Generate the Golden ISO Y/N")
-    if pullws == "Y":
+    boot_golden = input("Boot Golden iso Y/N?")
+    if boot_golden.upper() == 'Y':
+      build_golden = input("Generate the Golden ISO Y/N?")
+    if pullws.upper() == "Y":
       pullWorkSpaceAndBuild(platform)
-    if boot_golden == 'Y' and build_golden == 'Y':
+    spirent_topo = input("Spirent topo required Y/N?")
+    if spirent_topo.upper() == 'Y':
+        cmd = """ echo "    tgn:
+        platform: spirent
+        spirent_license_override:
+           license_server: '10.22.181.32'
+           spt_version: '5.38'
+        spirent_images:
+           windows: /auto/vxr/images/spirent/WindowsWithTestCenter_5_38
+           api: /auto/vxr/images/spirent/Spirent_TestCenter_LabServer-5.38.img
+           port: /auto/vxr/images/spirent/sptvm-5_38.img
+connections:
+    hubs:
+        TGEN-1-R1:
+        - tgn.1/1
+        - R1.HundredGigE0/0/0/0
+
+        TGEN-1-R2:
+        - tgn.1/2
+        - R1.HundredGigE0/0/0/4
+simulation:
+  vxr_sim_config:
+    default:
+       ConfigEnableNgdp: 'true'" >> infra/appmgr/test/etc/"""+yaml
+        process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
+        process.wait()
+    if boot_golden.upper() == 'Y' and build_golden.upper() == 'Y':
         generateGiso()
+
+
     # Arguments passed
 logfile = sys.argv[1]
 def mount_nb_sf(child):
@@ -243,6 +277,8 @@ def BootSpitfireSim():
      data = json.load(fo)
      host = data['R1']['HostAgent']
      serial0 = data['R1']['serial0']
+     spi_gui_ip = data['tgn_gui']['SimLocalIp']
+     spi_gui_port = data['tgn_gui']['redir3389']
      prPurple("Connecting to " +str(host)+":"+str(serial0))
 
      command = "telnet -l cisco "+str(host)+" "+str(serial0)
@@ -269,6 +305,16 @@ install
      url http://"""+MYADS+""":"""+httpport+""";management/
   !
 !
+interface HundredGigE0/0/0/0
+ ipv4 address 10.0.0.1 255.255.255.0
+ no shut
+!
+interface HundredGigE0/0/0/4
+ ipv4 address 20.0.0.1 255.255.255.0
+ no shut
+!
+
+
 """
      child.sendline(cmd)
      time.sleep(3)
@@ -308,6 +354,7 @@ install
      prGreen(command)
      prRed("If nobackup doesn't mount please use below command")
      prGreen("sshfs "+user+"@"+MYADS+":/nobackup/"+user+" /nb -o reconnect,ServerAliveInterval=15,ServerAliveCountMax=3")
+     prGreen("Spirent RD Details "+spi_gui_ip+":"+str(spi_gui_port))
      child.sendline('^]')
      child.sendline('q')
      child.sendline('\r\n')
