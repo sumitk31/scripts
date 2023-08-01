@@ -355,6 +355,8 @@ interface HundredGigE0/0/0/4
      prRed("If nobackup doesn't mount please use below command")
      prGreen("sshfs "+user+"@"+MYADS+":/nobackup/"+user+" /nb -o reconnect,ServerAliveInterval=15,ServerAliveCountMax=3")
      prGreen("Spirent RD Details "+spi_gui_ip+":"+str(spi_gui_port))
+     prGreen("Spirent user-id vxr-ixia-pc\vxr-ixia Password <blank> ")
+     prGreen("Connections 1/1<-------------> HUndredGigE 0/0/0/0 , 1/2 <--------------> HUndredGigE 0/0/0/4")
      child.sendline('^]')
      child.sendline('q')
      child.sendline('\r\n')
