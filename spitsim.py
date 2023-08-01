@@ -225,7 +225,8 @@ def storeUserInput():
   global platform
   global yaml
   global start_time
-  dictionary = {'httpport':httpport,'yaml':yaml,'platform':platform,'start_time':start_time}
+  global spirent_topo
+  dictionary = {'httpport':httpport,'yaml':yaml,'platform':platform,'start_time':start_time,'spirent_topo':spirent_topo}
   with open("sim_user_input.json", "w") as outfile:
     json.dump(dictionary, outfile)
 
@@ -234,11 +235,13 @@ def loadUserInput(read_ts):
   global platform
   global yaml
   global start_time
+  global spirent_topo
   with open("sim_user_input.json", "r") as infile:
     dictionary = json.load(infile)
     httpport = dictionary['httpport']
     platform = dictionary['platform']
     yaml = dictionary['yaml']
+    spirent_topo = dictionary['spirent_topo']
     if read_ts == True:
       start_time = int(dictionary['start_time'])
 def BootSpitfireSim():
