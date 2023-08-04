@@ -139,9 +139,6 @@ def getUserInputs():
     if spirent_topo.upper() == 'Y':
         cmd = """ echo "    tgn:
         platform: spirent
-        spirent_license_override:
-           license_server: '10.22.181.32'
-           spt_version: '5.38'
         spirent_images:
            windows: /auto/vxr/images/spirent/WindowsWithTestCenter_5_38
            api: /auto/vxr/images/spirent/Spirent_TestCenter_LabServer-5.38.img
@@ -154,11 +151,7 @@ connections:
 
         TGEN-1-R2:
         - tgn.1/2
-        - R1.HundredGigE0/0/0/4
-simulation:
-  vxr_sim_config:
-    default:
-       ConfigEnableNgdp: 'true'" >> infra/appmgr/test/etc/"""+yaml
+        - R1.HundredGigE0/0/0/4" >> infra/appmgr/test/etc/"""+yaml
         process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
         process.wait()
     if boot_golden.upper() == 'Y' and build_golden.upper() == 'Y':
