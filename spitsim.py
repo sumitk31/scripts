@@ -50,6 +50,7 @@ spirent_topo=""
 ws_upd_notified="N"
 start_time=int(datetime.now().strftime('%s'))
 auto_upd = ""
+branch = ""
 def generateGiso():
     child = pexpect.spawn("rm -rf ./hc_sb")
     time.sleep(1)
@@ -68,21 +69,25 @@ def generateGiso():
       child = pexpect.spawn("/auto/ioxprojects13/lindt-giso/isotools.sh --iso img-8000/8000-x64.iso --label healthcheck --repo ./hc_sb/ --pkglist xr-healthcheck xr-sandbox")
       out = child.expect(['Checksums OK','The specified output dir is not empty'],timeout=1000)
       time.sleep(15)
-    if boot_golden=='Y':
+
+def bootGiso():
+      global yaml
       golden_img = glob.glob( "output_gisobuild/giso/8000-golden*.iso")
       if(len(golden_img) == 0):
         prRed("Golden ISO missing.. Continuing with normal iso")
       else:
+        prRed("Updating "+yaml+" to use "+golden_img[0].strip())
         i = pexpect.spawn("sed -i \'s|img-8000\/8000-x64\.iso|"+golden_img[0].strip()+"|g\' infra\/appmgr\/test\/etc\/"+yaml)
+        time.sleep(3)
 
-
-
-def pullWorkSpaceAndBuild(platform):
+def pullWorkSpaceAndBuild(platform,branch):
     command="git clone git@gh-xr.scm.engit.cisco.com:xr/iosxr.git"
     #command="git clone https://github.com/sumitk31/scripts.git"
     process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE)
     process.wait()
     os.chdir("iosxr")
+    command="git checkout "+branch
+    process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE)
     if platform in ["1","2"]:
       plat = "8000"
     elif platform == "3":
@@ -107,8 +112,11 @@ def getUserInputs():
     global boot_golden
     global build_golden
     global spirent_topo
+    global branch
     pullws = input("Do you want to pull a WS Y/N ?")
-    auto_upd = input("Do you want to Auto Upgrade WS every week  Y/N ?")
+    if(pullws =='Y'):
+        branch = input("Branch name?")
+        auto_upd = input("Do you want to Auto Upgrade WS every week  Y/N ?")
 
     platform= input("Choose 1)SFF 2)SFD 3) XRV9k")
     if platform == "1":
@@ -133,9 +141,9 @@ def getUserInputs():
     boot_golden = input("Boot Golden iso Y/N?")
     if boot_golden.upper() == 'Y':
       build_golden = input("Generate the Golden ISO Y/N?")
-    if pullws.upper() == "Y":
-      pullWorkSpaceAndBuild(platform)
     spirent_topo = input("Spirent topo required Y/N?")
+    if pullws.upper() == "Y":
+      pullWorkSpaceAndBuild(platform,branch)
     if spirent_topo.upper() == 'Y':
         cmd = """ echo "    tgn:
         platform: spirent
@@ -154,8 +162,20 @@ connections:
         - R1.HundredGigE0/0/0/4" >> infra/appmgr/test/etc/"""+yaml
         process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
         process.wait()
-    if boot_golden.upper() == 'Y' and build_golden.upper() == 'Y':
+        cmd = "sed -i '6i\        vxr_sim_config:' infra/appmgr/test/etc/"+yaml
+        process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
+        process.wait()
+        cmd = "sed -i '7i\          shelf:' infra/appmgr/test/etc/"+yaml
+        process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
+        process.wait()
+        cmd = "sed -i '8i\            ConfigEnableNgdp: 'true'' infra/appmgr/test/etc/"+yaml
+        process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
+        process.wait()
+    if build_golden.upper() == 'Y':
         generateGiso()
+    if boot_golden.upper() == 'Y':
+        bootGiso()
+
 
 
     # Arguments passed
@@ -418,6 +438,7 @@ def checkSim(takeUserInput):
 
 def CheckAndUpgradeWS():
     global ws_upd_notified
+    global branch
     d1 = os.popen("git log -1 --format=%cd")
     d1str=d1.read()
     d1 = datetime.strptime(d1str,"%a %b %d %H:%M:%S %Y %z\n")
@@ -439,7 +460,7 @@ def CheckAndUpgradeWS():
         process = subprocess.Popen("lcleanup --killprocs; lcleanup --unmount; lcleanup --mqueues; lcleanup --deletews", shell=True, stdout=subprocess.PIPE, executable='/bin/bash')
         process.wait()
         os.chdir("..")
-        pullWorkSpaceAndBuild(platform)
+        pullWorkSpaceAndBuild(platform,branch)
         #sys.exit(0)
 
 
