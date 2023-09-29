@@ -168,7 +168,7 @@ connections:
         cmd = "sed -i '7i\          shelf:' infra/appmgr/test/etc/"+yaml
         process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
         process.wait()
-        cmd = "sed -i '8i\            ConfigEnableNgdp: 'true'' infra/appmgr/test/etc/"+yaml
+        cmd = """sed -i "8i\            ConfigEnableNgdp: 'true'" infra/appmgr/test/etc/"""+yaml
         process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
         process.wait()
     if build_golden.upper() == 'Y':
