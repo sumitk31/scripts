@@ -304,10 +304,6 @@ def BootSpitfireSim():
      child.sendline("\r\n");
      child.expect(['CPU0:["-z]*#'],timeout=300)
      prPurple("Setting up routes")
-     child.sendline('conf t')
-     time.sleep(3)
-     child.sendline('root')
-     time.sleep(2)
      #Insert your it_helper_config here
      cmd="""router static
   vrf management
@@ -330,27 +326,22 @@ interface HundredGigE0/0/0/4
  ipv4 address 20.0.0.1 255.255.255.0
  no shut
 !
-
+logging console debugging
 
 """
-     child.sendline(cmd)
-     time.sleep(3)
-     child.sendline('commit')
-     child.sendline('end')
      #child.sendline("run ip netns exec xrnns bash")
      child.sendline("run")
      #child.sendline("dhclient eth-mgmt")
      time.sleep(1)
      child.sendline("route add -host "+MYADS+" gw 192.168.122.1 eth-mgmt")
-     #pdb.set_trace()
      #child.sendline("setenforce 0")
      prPurple("Setting up nobackup mount")
      child.sendline("mkdir /nb")
      
-     if platform == "3":
-         mount_nb_xrv9k(child)
-     else:
-         mount_nb_sf(child)
+     #if platform == "3":
+         #mount_nb_xrv9k(child)
+     #else:
+         #mount_nb_sf(child)
      time.sleep(3)
      child.sendline('\r\n')
      child.sendline('\r\n')
@@ -364,12 +355,20 @@ interface HundredGigE0/0/0/4
 
      child.sendline('exit')
      time.sleep(2)
+     child.sendline('conf t')
+     time.sleep(3)
+     child.sendline('root')
+     time.sleep(2)
+     child.sendline(cmd)
+     time.sleep(3)
+     child.sendline('commit')
+     child.sendline('end')
      child.sendline('show run interface MgmtEth 0/RP0/CPU0/0')
      child.sendline('exit')
      child.sendline('\r\n')
      prGreen("Sim Is UP , login using below command")
      prGreen(command)
-     prRed("If nobackup doesn't mount please use below command")
+     prRed("nobackup mount doesn't work now Due to DUO push authentication please use below command to mount nobackup")
      prGreen("sshfs "+user+"@"+MYADS+":/nobackup/"+user+" /nb -o reconnect,ServerAliveInterval=15,ServerAliveCountMax=3")
      if spirent_topo.upper() == 'Y':
        prGreen("Spirent RD Details "+spi_gui_ip+":"+str(spi_gui_port))
@@ -399,7 +398,7 @@ def checkSim(takeUserInput):
      else:
        if out == 1:
         status = child1.read()
-        if 'ended' in status.decode("utf-8") or 'unknown' in status.decode("utf-8") or 'not running' in status.decode("utf-8"):
+        if 'ended' in status.decode("utf-8") or 'unknown' in status.decode("utf-8") or 'not running' in status.decode("utf-8") or 'aborted' in status.decode("utf-8"):
           prLightGray("\nSim ended.Starting again")
           if(takeUserInput == True):
               getUserInputs()
