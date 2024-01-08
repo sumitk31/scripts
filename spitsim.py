@@ -43,7 +43,6 @@ user=os.getlogin()
 yaml = ""
 httpport=""
 platform=""
-password=""
 boot_golden=""
 build_golden=""
 spirent_topo=""
@@ -107,7 +106,6 @@ def getUserInputs():
     global yaml
     global httpport 
     global platform
-    global password
     global auto_upd
     global boot_golden
     global build_golden
@@ -134,7 +132,6 @@ def getUserInputs():
     if revert_yaml == 'Y':
       #revert back the config file before each run
       i = pexpect.spawn("git checkout infra/appmgr/test/etc/"+yaml)
-    password=getpass.getpass("CEC Password")
     httpport = input("Enter http port for remote repo ")
     
    
@@ -182,7 +179,6 @@ connections:
 logfile = sys.argv[1]
 def mount_nb_sf(child):
      while True:
-       global password
        child.sendline("sshfs "+user+"@"+MYADS+":/nobackup/"+user+" /nb -o reconnect,ServerAliveInterval=15,ServerAliveCountMax=3 ")
        try:
          ret = child.expect(['Are you sure','password'],timeout=60)
