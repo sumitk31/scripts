@@ -43,6 +43,7 @@ user=os.getlogin()
 yaml = ""
 httpport=""
 platform=""
+password=""
 boot_golden=""
 build_golden=""
 spirent_topo=""
@@ -55,7 +56,6 @@ def generateGiso():
     time.sleep(1)
     child = pexpect.spawn("mkdir ./hc_sb")
     time.sleep(1)
-    os.system("cp img-8000/optional-rpms/healthcheck/*.rpm ./hc_sb/")
     os.system("cp img-8000/optional-rpms/sandbox/*.rpm ./hc_sb/")
     time.sleep(1)
     child = pexpect.spawn("/auto/ioxprojects13/lindt-giso/isotools.sh --clean --iso img-8000/8000-x64.iso --label healthcheck --repo ./hc_sb/ --pkglist xr-healthcheck xr-sandbox")
@@ -106,6 +106,7 @@ def getUserInputs():
     global yaml
     global httpport 
     global platform
+    global password
     global auto_upd
     global boot_golden
     global build_golden
@@ -132,6 +133,7 @@ def getUserInputs():
     if revert_yaml == 'Y':
       #revert back the config file before each run
       i = pexpect.spawn("git checkout infra/appmgr/test/etc/"+yaml)
+    password=getpass.getpass("CEC Password")
     httpport = input("Enter http port for remote repo ")
     
    
@@ -165,7 +167,7 @@ connections:
         cmd = "sed -i '7i\          shelf:' infra/appmgr/test/etc/"+yaml
         process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
         process.wait()
-        cmd = """sed -i "8i\            ConfigEnableNgdp: 'true'" infra/appmgr/test/etc/"""+yaml
+        cmd = "sed -i '8i\            ConfigEnableNgdp: 'true'' infra/appmgr/test/etc/"+yaml
         process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
         process.wait()
     if build_golden.upper() == 'Y':
@@ -179,6 +181,7 @@ connections:
 logfile = sys.argv[1]
 def mount_nb_sf(child):
      while True:
+       global password
        child.sendline("sshfs "+user+"@"+MYADS+":/nobackup/"+user+" /nb -o reconnect,ServerAliveInterval=15,ServerAliveCountMax=3 ")
        try:
          ret = child.expect(['Are you sure','password'],timeout=60)
@@ -189,13 +192,15 @@ def mount_nb_sf(child):
          prRed("sshfs to ADS failed check connectivity to ADS")
          return
        child.sendline(password)
-       ret = child.expect(['CPU0:','password'],timeout=10)
+       ret = child.expect(['CPU0:','password','Enter a passcode'],timeout=10)
        if ret==1:
          prRed("Mount nobackup failed, probably the CEC password was wrong")
          password=getpass.getpass("CEC Password")
          child.sendline(password)
          break
-       else:
+       elif ret == 2:
+         prRed("Check Duo Notification on phone")
+         child.sendline('1\r\n')
          break
 
 def mount_nb_xrv9k(child):
@@ -261,7 +266,7 @@ def BootSpitfireSim():
   global start_time
   prPurple("starting Sim")
   storeUserInput()
-  i = pexpect.spawn("it_helper_config --http_server_port "+httpport)
+  #i = pexpect.spawn("it_helper_config --http_server_port "+httpport)
   if(os.path.exists("vxr.out/slurm.jobid")):
      prPurple("Prev Running instance detected")
      prPurple("Cleaning previous instances....")
@@ -300,6 +305,10 @@ def BootSpitfireSim():
      child.sendline("\r\n");
      child.expect(['CPU0:["-z]*#'],timeout=300)
      prPurple("Setting up routes")
+     child.sendline('conf t')
+     time.sleep(3)
+     child.sendline('root')
+     time.sleep(2)
      #Insert your it_helper_config here
      cmd="""router static
   vrf management
@@ -322,22 +331,27 @@ interface HundredGigE0/0/0/4
  ipv4 address 20.0.0.1 255.255.255.0
  no shut
 !
-logging console debugging
+
 
 """
+     child.sendline(cmd)
+     time.sleep(3)
+     child.sendline('commit')
+     child.sendline('end')
      #child.sendline("run ip netns exec xrnns bash")
      child.sendline("run")
      #child.sendline("dhclient eth-mgmt")
      time.sleep(1)
      child.sendline("route add -host "+MYADS+" gw 192.168.122.1 eth-mgmt")
+     #pdb.set_trace()
      #child.sendline("setenforce 0")
      prPurple("Setting up nobackup mount")
      child.sendline("mkdir /nb")
      
-     #if platform == "3":
-         #mount_nb_xrv9k(child)
-     #else:
-         #mount_nb_sf(child)
+     if platform == "3":
+         mount_nb_xrv9k(child)
+     else:
+         mount_nb_sf(child)
      time.sleep(3)
      child.sendline('\r\n')
      child.sendline('\r\n')
@@ -351,20 +365,12 @@ logging console debugging
 
      child.sendline('exit')
      time.sleep(2)
-     child.sendline('conf t')
-     time.sleep(3)
-     child.sendline('root')
-     time.sleep(2)
-     child.sendline(cmd)
-     time.sleep(3)
-     child.sendline('commit')
-     child.sendline('end')
      child.sendline('show run interface MgmtEth 0/RP0/CPU0/0')
      child.sendline('exit')
      child.sendline('\r\n')
      prGreen("Sim Is UP , login using below command")
      prGreen(command)
-     prRed("nobackup mount doesn't work now Due to DUO push authentication please use below command to mount nobackup")
+     prRed("If nobackup doesn't mount please use below command")
      prGreen("sshfs "+user+"@"+MYADS+":/nobackup/"+user+" /nb -o reconnect,ServerAliveInterval=15,ServerAliveCountMax=3")
      if spirent_topo.upper() == 'Y':
        prGreen("Spirent RD Details "+spi_gui_ip+":"+str(spi_gui_port))
@@ -376,7 +382,8 @@ logging console debugging
      child.sendline('\r\n')
      child.close()
      start_time = int(datetime.now().strftime('%s'))
-
+sim_status_fail = ["unknown","not running","aborted","ended"]
+sim_status_run = ["running"]
 def checkSim(takeUserInput):
      command = "/auto/vxr/pyvxr/latest/vxr.py status"
      out =""
@@ -394,12 +401,17 @@ def checkSim(takeUserInput):
      else:
        if out == 1:
         status = child1.read()
-        if 'ended' in status.decode("utf-8") or 'unknown' in status.decode("utf-8") or 'not running' in status.decode("utf-8") or 'aborted' in status.decode("utf-8"):
+        curr_status = (b'{"vxr-'+status)
+        decoded_string = curr_status.decode("utf-8")
+        status = list(json.loads(decoded_string).values())
+
+        #if status in status.decode("utf-8") or 'unknown' in status.decode("utf-8") or 'not running' in status.decode("utf-8"):
+        if status[0] in sim_status_fail:
           prLightGray("\nSim ended.Starting again")
           if(takeUserInput == True):
               getUserInputs()
           BootSpitfireSim()
-        elif 'running' in status.decode("utf-8"):
+        elif status[0] in sim_status_run:
           loadUserInput(takeUserInput)
           curr_time = int(datetime.now().strftime('%s'))
           duration = curr_time - start_time
