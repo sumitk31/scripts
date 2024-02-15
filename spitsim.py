@@ -136,6 +136,9 @@ def getUserInputs():
     password=getpass.getpass("CEC Password")
     httpport = input("Enter http port for remote repo ")
     
+    i = pexpect.spawn("sed -i \'s|R1|router0|g\' infra\/appmgr\/test\/etc\/"+yaml)
+    time.sleep(3)
+    pdb.set_trace()
    
     boot_golden = input("Boot Golden iso Y/N?")
     if boot_golden.upper() == 'Y':
