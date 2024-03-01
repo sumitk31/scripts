@@ -56,6 +56,7 @@ def generateGiso():
     time.sleep(1)
     child = pexpect.spawn("mkdir ./hc_sb")
     time.sleep(1)
+    os.system("cp img-8000/optional-rpms/healthcheck/*.rpm ./hc_sb/")
     os.system("cp img-8000/optional-rpms/sandbox/*.rpm ./hc_sb/")
     time.sleep(1)
     child = pexpect.spawn("/auto/ioxprojects13/lindt-giso/isotools.sh --clean --iso img-8000/8000-x64.iso --label healthcheck --repo ./hc_sb/ --pkglist xr-healthcheck xr-sandbox")
@@ -134,11 +135,9 @@ def getUserInputs():
       #revert back the config file before each run
       i = pexpect.spawn("git checkout infra/appmgr/test/etc/"+yaml)
     password=getpass.getpass("CEC Password")
-    httpport = input("Enter http port for remote repo ")
     
     i = pexpect.spawn("sed -i \'s|R1|router0|g\' infra\/appmgr\/test\/etc\/"+yaml)
     time.sleep(3)
-    pdb.set_trace()
    
     boot_golden = input("Boot Golden iso Y/N?")
     if boot_golden.upper() == 'Y':
@@ -155,13 +154,13 @@ def getUserInputs():
            port: /auto/vxr/images/spirent/sptvm-5_38.img
 connections:
     hubs:
-        TGEN-1-R1:
+        TGEN-1-router0:
         - tgn.1/1
-        - R1.HundredGigE0/0/0/0
+        - router0.HundredGigE0/0/0/0
 
         TGEN-1-R2:
         - tgn.1/2
-        - R1.HundredGigE0/0/0/4" >> infra/appmgr/test/etc/"""+yaml
+        - router0.HundredGigE0/0/0/4" >> infra/appmgr/test/etc/"""+yaml
         process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
         process.wait()
         cmd = "sed -i '6i\        vxr_sim_config:' infra/appmgr/test/etc/"+yaml
@@ -170,7 +169,7 @@ connections:
         cmd = "sed -i '7i\          shelf:' infra/appmgr/test/etc/"+yaml
         process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
         process.wait()
-        cmd = "sed -i '8i\            ConfigEnableNgdp: 'true'' infra/appmgr/test/etc/"+yaml
+        cmd = "sed -i '8i\            ConfigEnableNgdp: \"True\" ' infra/appmgr/test/etc/"+yaml
         process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
         process.wait()
     if build_golden.upper() == 'Y':
@@ -290,13 +289,19 @@ def BootSpitfireSim():
   start_time=int(datetime.now().strftime('%s'))
   if (i == 0):
      prPurple('Sim UP')
+     prPurple('SITH Cleanup ongoing...')
+     command = "sith cleanup"
+     prGreen('SITH Configure ongoing...')
+     child = pexpect.spawn(command,timeout=None)
+     command = "sith configure --vxr"
+     child = pexpect.spawn(command,timeout=None)
      flushedStuff=""
      child = pexpect.spawn('/bin/sh -c "/auto/vxr/pyvxr/latest/vxr.py ports > ports.json"')
      time.sleep(10)
      fo = open('ports.json')
      data = json.load(fo)
-     host = data['R1']['HostAgent']
-     serial0 = data['R1']['serial0']
+     host = data['router0']['HostAgent']
+     serial0 = data['router0']['serial0']
      if spirent_topo.upper() == 'Y':
        spi_gui_ip = data['tgn_gui']['SimLocalIp']
        spi_gui_port = data['tgn_gui']['redir3389']
@@ -321,11 +326,6 @@ def BootSpitfireSim():
   !
 !
 
-install
-  repository remote_dev_rpm
-     url http://"""+MYADS+""":"""+httpport+""";management/
-  !
-!
 interface HundredGigE0/0/0/0
  ipv4 address 10.0.0.1 255.255.255.0
  no shut
@@ -434,8 +434,8 @@ def checkSim(takeUserInput):
               process.wait()
               fo = open('ports.json')
               data = json.load(fo)
-              host = data['R1']['HostAgent']
-              serial0 = data['R1']['serial0']
+              host = data['router0']['HostAgent']
+              serial0 = data['router0']['serial0']
               prPurple("Connect to existing Sim using telnet " +str(host)+" "+str(serial0))
               #sys.exit(0)
 
