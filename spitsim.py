@@ -51,6 +51,8 @@ ws_upd_notified="N"
 start_time=int(datetime.now().strftime('%s'))
 auto_upd = ""
 branch = ""
+disable_selinux = ""
+selinux_disable_patch = "/auto/appmgr/selinux_disable_on_8k.diff"
 def generateGiso():
     child = pexpect.spawn("rm -rf ./hc_sb")
     time.sleep(1)
@@ -70,6 +72,19 @@ def generateGiso():
       out = child.expect(['Checksums OK','The specified output dir is not empty'],timeout=1000)
       time.sleep(15)
 
+def wait_for_file(file_path, timeout):
+    start_time = time.time()
+
+    while True:
+        if os.path.exists(file_path):
+            prPurple(f"File {file_path} created.")
+            return True
+        
+        if time.time() - start_time > timeout:
+            prPurple(f"Timeout exceeded while waiting for file {file_path}.")
+            return False
+        
+        time.sleep(300) 
 def bootGiso():
       global yaml
       golden_img = glob.glob( "output_gisobuild/giso/8000-golden*.iso")
@@ -79,7 +94,24 @@ def bootGiso():
         prRed("Updating "+yaml+" to use "+golden_img[0].strip())
         i = pexpect.spawn("sed -i \'s|img-8000\/8000-x64\.iso|"+golden_img[0].strip()+"|g\' infra\/appmgr\/test\/etc\/"+yaml)
         time.sleep(3)
-
+        
+def rebuild_with_selinux_disable_patch():
+    global selinux_disable_patch
+    command = "git apply "+ selinux_disable_patch
+    process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE)
+    process.wait()
+    prLightGray( process.returncode)
+    buildcmd = "tools/misc/xr_bld -plat 8000"
+    prGreen("Starting XR-build with Patch")
+    process = subprocess.Popen(buildcmd, shell=True, stdout=subprocess.PIPE)
+    process.wait()
+    prLightGray( process.returncode)
+    prGreen(" XR-build completed")
+    command = "git restore platforms/spitfire/thinxr/boot/src/grub_rp.yaml"
+    process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE)
+    process.wait()
+    prLightGray( process.returncode)
+    
 def pullWorkSpaceAndBuild(platform,branch):
     command="git clone git@gh-xr.scm.engit.cisco.com:xr/iosxr.git"
     #command="git clone https://github.com/sumitk31/scripts.git"
@@ -113,6 +145,8 @@ def getUserInputs():
     global build_golden
     global spirent_topo
     global branch
+    global disable_selinux
+    
     pullws = input("Do you want to pull a WS Y/N ?")
     if(pullws =='Y'):
         branch = input("Branch name?")
@@ -138,6 +172,9 @@ def getUserInputs():
     
     i = pexpect.spawn("sed -i \'s|R1|router0|g\' infra\/appmgr\/test\/etc\/"+yaml)
     time.sleep(3)
+    if platform != "3":
+        disable_selinux = input("Disable SELinux via patch and rebuild Y/N?")
+        
    
     boot_golden = input("Boot Golden iso Y/N?")
     if boot_golden.upper() == 'Y':
@@ -172,6 +209,8 @@ connections:
         cmd = "sed -i '8i\            ConfigEnableNgdp: \"True\" ' infra/appmgr/test/etc/"+yaml
         process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
         process.wait()
+    if disable_selinux.upper() == 'Y':
+        rebuild_with_selinux_disable_patch()
     if build_golden.upper() == 'Y':
         generateGiso()
     if boot_golden.upper() == 'Y':
@@ -184,7 +223,10 @@ logfile = sys.argv[1]
 def mount_nb_sf(child):
      while True:
        global password
+       child.sendline("dhclient -i eth-mgmt")
        child.sendline("sshfs "+user+"@"+MYADS+":/nobackup/"+user+" /nb -o reconnect,ServerAliveInterval=15,ServerAliveCountMax=3 ")
+       break
+       '''
        try:
          ret = child.expect(['Are you sure','password'],timeout=60)
          if ret == 0:
@@ -204,6 +246,7 @@ def mount_nb_sf(child):
          prRed("Check Duo Notification on phone")
          child.sendline('1\r\n')
          break
+       '''
 
 def mount_nb_xrv9k(child):
      while True:
@@ -278,7 +321,21 @@ def BootSpitfireSim():
      time.sleep(60)
      child = pexpect.spawn("rm -rf vxr.out", timeout=None)
      prPurple("Starting fresh instances....")
+     
   try:
+     if platform != 3:
+         file_path = "img-8000/8000-x64.iso"
+     else:
+         file_path = "img-xrv9k/xrv9k-full-x.iso"
+         
+     timeout = 5000  # Timeout in seconds (5 minutes)
+
+     prPurple(f"Waiting for iso {file_path} to be created...")
+     if wait_for_file(file_path, timeout):
+        prPurple("iso available. Proceeding with further actions.")
+     else:
+        prPurple("iso not found within the specified timeout. Exiting.")
+        sys.exit(0)
      command = "/auto/vxr/pyvxr/latest/vxr.py start ./infra/appmgr/test/etc/"+yaml
      child = pexpect.spawn(command,timeout=None)
      child.logfile = open(logfile, "wb")
@@ -302,12 +359,17 @@ def BootSpitfireSim():
      data = json.load(fo)
      host = data['router0']['HostAgent']
      serial0 = data['router0']['serial0']
+     xr_mgmt_ip = data['router0']['xr_mgmt_ip']
+     
      if spirent_topo.upper() == 'Y':
        spi_gui_ip = data['tgn_gui']['SimLocalIp']
        spi_gui_port = data['tgn_gui']['redir3389']
      prPurple("Connecting to " +str(host)+":"+str(serial0))
 
-     command = "telnet -l cisco "+str(host)+" "+str(serial0)
+     command_console = "telnet -l cisco "+str(host)+" "+str(serial0)
+
+     command = "sshpass -p cisco123  ssh -J "+str(host)+" cisco@"+str(xr_mgmt_ip)
+     
      child = pexpect.spawn(command,timeout=None,ignore_sighup=True)
      time.sleep(1)
      child.sendline("\r\n");
@@ -349,11 +411,11 @@ interface HundredGigE0/0/0/4
      #pdb.set_trace()
      #child.sendline("setenforce 0")
      prPurple("Setting up nobackup mount")
-     child.sendline("mkdir /nb")
      
      if platform == "3":
          mount_nb_xrv9k(child)
      else:
+         child.sendline("mkdir /nb")
          mount_nb_sf(child)
      time.sleep(3)
      child.sendline('\r\n')
@@ -372,7 +434,10 @@ interface HundredGigE0/0/0/4
      child.sendline('exit')
      child.sendline('\r\n')
      prGreen("Sim Is UP , login using below command")
-     prGreen(command)
+     prGreen("Console "+command_console)
+     prGreen("MGMT "+command)
+     prGreen("To Disable Selinux please use below command and reboot")
+     prGreen("run grub-editenv /boot/efi/EFI/BOOT/grubenv set slx_dev=1")
      prRed("If nobackup doesn't mount please use below command")
      prGreen("sshfs "+user+"@"+MYADS+":/nobackup/"+user+" /nb -o reconnect,ServerAliveInterval=15,ServerAliveCountMax=3")
      if spirent_topo.upper() == 'Y':
@@ -436,7 +501,12 @@ def checkSim(takeUserInput):
               data = json.load(fo)
               host = data['router0']['HostAgent']
               serial0 = data['router0']['serial0']
-              prPurple("Connect to existing Sim using telnet " +str(host)+" "+str(serial0))
+              xr_mgmt_ip = data['router0']['xr_mgmt_ip']
+              command = "sshpass -p cisco123  ssh -J "+str(host)+" cisco@"+str(xr_mgmt_ip)
+              prPurple("Connect to existing Sim using console telnet " +str(host)+" "+str(serial0))
+              prPurple("Connect to existing Sim using mgmt  "+command)
+              pGreen("To Disable Selinux please use below command and reboot")
+              pGreen("run grub-editenv /boot/efi/EFI/BOOT/grubenv set slx_dev=1")
               #sys.exit(0)
 
 
@@ -449,6 +519,7 @@ def checkSim(takeUserInput):
 def CheckAndUpgradeWS():
     global ws_upd_notified
     global branch
+    global auto_upd
     d1 = os.popen("git log -1 --format=%cd")
     d1str=d1.read()
     d1 = datetime.strptime(d1str,"%a %b %d %H:%M:%S %Y %z\n")
