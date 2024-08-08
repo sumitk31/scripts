@@ -330,7 +330,7 @@ def BootSpitfireSim():
      if platform == "3":
          file_path = "img-xrv9k/xrv9k-full-x.iso"
      if platform == "4":
-         file_path = "img-asr9k/asr9k-mini-x64-24.4.1.21I.iso"
+         file_path = "img-asr9k/asr9k-mini-x64.iso"
          
      timeout = 5000  # Timeout in seconds (5 minutes)
 
