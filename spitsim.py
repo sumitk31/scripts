@@ -152,13 +152,15 @@ def getUserInputs():
         branch = input("Branch name?")
         auto_upd = input("Do you want to Auto Upgrade WS every week  Y/N ?")
 
-    platform= input("Choose 1)SFF 2)SFD 3) XRV9k")
+    platform= input("Choose 1)SFF 2)SFD 3) XRV9k 4) ASR9k")
     if platform == "1":
         yaml = "spitfire-f.yaml"
     elif platform == "2":
         yaml = "spitfire-d.yaml"
     elif platform == "3":
         yaml = "xrv9k.yaml"
+    elif platform == "4":
+        yaml = "asr9k.yaml"
     else :
         prRed("Wrong Input")
         sys.exit(0)
@@ -252,11 +254,11 @@ def mount_nb_xrv9k(child):
      while True:
        global password
        child.sendline("exit")
-       ret = child.expect(['CPU0:'],timeout=10)
+       ret = child.expect(['CPU0:'],timeout=60)
        child.sendline("admin")
-       ret = child.expect(['sysadmin'],timeout=10)
+       ret = child.expect(['sysadmin'],timeout=100)
        child.sendline("run ssh 10.0.2.16")
-       ret = child.expect(['host'],timeout=10)
+       ret = child.expect(['host'],timeout=100)
        child.sendline("passwd")
        ret = child.expect(['Enter new UNIX password:'],timeout=10)
        child.sendline("cisco123")
@@ -323,10 +325,12 @@ def BootSpitfireSim():
      prPurple("Starting fresh instances....")
      
   try:
-     if platform != 3:
+     if platform in ["1","2"]:
          file_path = "img-8000/8000-x64.iso"
-     else:
+     if platform == "3":
          file_path = "img-xrv9k/xrv9k-full-x.iso"
+     if platform == "4":
+         file_path = "img-asr9k/asr9k-mini-x64-24.4.1.21I.iso"
          
      timeout = 5000  # Timeout in seconds (5 minutes)
 
@@ -342,7 +346,7 @@ def BootSpitfireSim():
   except:
        prPurple("Exception")
   time.sleep(5)                             
-  i = child.expect(['Sim up'],timeout=1800)
+  i = child.expect(['Sim up'],timeout=3000)
   start_time=int(datetime.now().strftime('%s'))
   if (i == 0):
      prPurple('Sim UP')
@@ -368,7 +372,7 @@ def BootSpitfireSim():
 
      command_console = "telnet -l cisco "+str(host)+" "+str(serial0)
 
-     command = "sshpass -p cisco123  ssh -J "+str(host)+" cisco@"+str(xr_mgmt_ip)
+     command = "sshpass -p cisco123  ssh -x -J "+str(host)+" cisco@"+str(xr_mgmt_ip)
      
      child = pexpect.spawn(command,timeout=None,ignore_sighup=True)
      time.sleep(1)
