@@ -19,13 +19,13 @@ echo "eval \"\$(pyenv init -)\"">>~/.bashrc
 export PYENV_ROOT="/nobackup/$USER/pyenv"
 export PATH="$PYENV_ROOT/bin:$PATH"
 export PATH="/auto/smartdev/bin/:$PATH"
-pyenv install 3.8.0
+pyenv install 3.9.0
 #pyenv install 3.4.0
 echo "alias pyversions='pyenv versions'">>~/.bashrc
 echo "alias pyshell='pyenv shell'">>~/.bashrc
 eval "$(pyenv init --path)"
 eval "$(pyenv init -)"
-pyenv shell 3.8.0
+pyenv shell 3.9.0
 pip install pexpect
 cp ~sukala/spitsim.py ~/
 echo "alias lspitsim='python ~/scripts/spitsim.py simlog'">>~/.bashrc
