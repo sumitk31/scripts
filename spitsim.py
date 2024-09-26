@@ -184,13 +184,31 @@ def getUserInputs():
     spirent_topo = input("Spirent topo required Y/N?")
     if pullws.upper() == "Y":
       pullWorkSpaceAndBuild(platform,branch)
+    routerport = "router0.HundredGigE0/0/0/0"
     if spirent_topo.upper() == 'Y':
         cmd = """ echo "    tgn:
         platform: spirent
         spirent_images:
            windows: /auto/vxr/images/spirent/WindowsWithTestCenter_5_38
            api: /auto/vxr/images/spirent/Spirent_TestCenter_LabServer-5.38.img
-           port: /auto/vxr/images/spirent/sptvm-5_38.img
+           port: /auto/vxr/images/spirent/sptvm-5_38.img " >>infra/appmgr/test/etc/"""+yaml
+        process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
+        process.wait()
+        if platform == "1":
+            i = pexpect.spawn("sed -i \'/hubs:/r nosi_tgen.txt' infra\/appmgr\/test\/etc\/"+yaml)
+            time.sleep(3)
+        '''
+          cmd = """ echo "
+        TGEN-1-router0:
+        - tgn.1/1
+        - router0.FourHundredGigE0/0/0/0
+
+        TGEN-1-R2:
+        - tgn.1/2
+        - router0.FourHundredGigE0/0/0/1"  >> infra/appmgr/test/etc/"""+yaml
+
+        if platform == "2":
+          cmd = """ echo "
 connections:
     hubs:
         TGEN-1-router0:
@@ -199,9 +217,11 @@ connections:
 
         TGEN-1-R2:
         - tgn.1/2
-        - router0.HundredGigE0/0/0/4" >> infra/appmgr/test/etc/"""+yaml
+        - router0.HundredGigE0/0/0/1"  >> infra/appmgr/test/etc/"""+yaml
         process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
         process.wait()
+        '''
+        '''
         cmd = "sed -i '6i\        vxr_sim_config:' infra/appmgr/test/etc/"+yaml
         process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
         process.wait()
@@ -211,6 +231,7 @@ connections:
         cmd = "sed -i '8i\            ConfigEnableNgdp: \"True\" ' infra/appmgr/test/etc/"+yaml
         process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
         process.wait()
+        '''
     if disable_selinux.upper() == 'Y':
         rebuild_with_selinux_disable_patch()
     if build_golden.upper() == 'Y':
@@ -391,18 +412,31 @@ def BootSpitfireSim():
     !
   !
 !
-
+"""
+     if platform == "1":
+       intf_config="""
+interface FourHundredGigE0/0/0/0
+ ipv4 address 10.0.0.1 255.255.255.0
+ no shut
+!
+interface FourHundredGigE0/0/0/1
+ ipv4 address 20.0.0.1 255.255.255.0
+ no shut
+!
+"""
+     if platform == "2":
+       intf_config="""
 interface HundredGigE0/0/0/0
  ipv4 address 10.0.0.1 255.255.255.0
  no shut
 !
-interface HundredGigE0/0/0/4
+interface HundredGigE0/0/0/1
  ipv4 address 20.0.0.1 255.255.255.0
  no shut
 !
-
-
 """
+
+     cmd = cmd + intf_config
      child.sendline(cmd)
      time.sleep(3)
      child.sendline('commit')
@@ -447,7 +481,7 @@ interface HundredGigE0/0/0/4
      if spirent_topo.upper() == 'Y':
        prGreen("Spirent RD Details "+spi_gui_ip+":"+str(spi_gui_port))
        prGreen("Spirent user-id vxr-ixia-pc\\vxr-ixia Password <blank> ")
-       prGreen("Connections 1/1<-------------> HUndredGigE 0/0/0/0 , 1/2 <--------------> HUndredGigE 0/0/0/4")
+       prGreen("Connections 1/1<-------------> HUndredGigE 0/0/0/0 , 1/2 <--------------> HUndredGigE 0/0/0/1")
      child.sendline('^]')
      child.sendline('q')
      child.sendline('\r\n')
@@ -509,8 +543,8 @@ def checkSim(takeUserInput):
               command = "sshpass -p cisco123  ssh -J "+str(host)+" cisco@"+str(xr_mgmt_ip)
               prPurple("Connect to existing Sim using console telnet " +str(host)+" "+str(serial0))
               prPurple("Connect to existing Sim using mgmt  "+command)
-              pGreen("To Disable Selinux please use below command and reboot")
-              pGreen("run grub-editenv /boot/efi/EFI/BOOT/grubenv set slx_dev=1")
+              prGreen("To Disable Selinux please use below command and reboot")
+              prGreen("run grub-editenv /boot/efi/EFI/BOOT/grubenv set slx_dev=1")
               #sys.exit(0)
 
 
