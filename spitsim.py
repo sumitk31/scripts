@@ -40,6 +40,7 @@ except:
     sys.exit(0);
 MYADS=socket.gethostbyname(socket.gethostname())
 user=os.getlogin()
+new_sim_path=""
 yaml = ""
 httpport=""
 platform=""
@@ -152,7 +153,7 @@ def getUserInputs():
         branch = input("Branch name?")
         auto_upd = input("Do you want to Auto Upgrade WS every week  Y/N ?")
 
-    platform= input("Choose 1)SFF 2)SFD 3) XRV9k 4) ASR9k")
+    platform= input("Choose 1)SFF 2)SFD 3) XRV9k 4) ASR9k 5)Glandon")
     if platform == "1":
         yaml = "spitfire-f.yaml"
     elif platform == "2":
@@ -161,6 +162,8 @@ def getUserInputs():
         yaml = "xrv9k.yaml"
     elif platform == "4":
         yaml = "asr9k.yaml"
+    elif platform == "5":
+        yaml = "spitfire-glandon-f.yaml"
     else :
         prRed("Wrong Input")
         sys.exit(0)
@@ -326,16 +329,17 @@ def loadUserInput(read_ts):
     spirent_topo = dictionary['spirent_topo']
     if read_ts == True:
       start_time = int(dictionary['start_time'])
-def BootSpitfireSim():
+def BootSpitfireSim():# new_sim_path added to allow more than on sim being launched from same ws
   fail=0
   global httpport
   global platform
   global yaml
   global start_time
+  global new_sim_path
   prPurple("starting Sim")
   storeUserInput()
   #i = pexpect.spawn("it_helper_config --http_server_port "+httpport)
-  if(os.path.exists("vxr.out/slurm.jobid")):
+  if(os.path.exists("vxr.out/slurm.jobid") and new_sim_path == ""):
      prPurple("Prev Running instance detected")
      prPurple("Cleaning previous instances....")
      command = "/auto/vxr/pyvxr/latest/vxr.py clean"
@@ -352,16 +356,21 @@ def BootSpitfireSim():
          file_path = "img-xrv9k/xrv9k-full-x.iso"
      if platform == "4":
          file_path = "img-asr9k/asr9k-mini-x64.iso"
+     if platform == "5":
+         file_path = "img-8000-aarch64/8000-aarch64.iso"
          
      timeout = 5000  # Timeout in seconds (5 minutes)
-
      prPurple(f"Waiting for iso {file_path} to be created...")
      if wait_for_file(file_path, timeout):
         prPurple("iso available. Proceeding with further actions.")
      else:
         prPurple("iso not found within the specified timeout. Exiting.")
         sys.exit(0)
-     command = "/auto/vxr/pyvxr/latest/vxr.py start ./infra/appmgr/test/etc/"+yaml
+     if new_sim_path == "":
+         command = "/auto/vxr/pyvxr/latest/vxr.py start ./infra/appmgr/test/etc/"+yaml
+     else:
+         os.makedirs(new_sim_path,exist_ok=True)
+         command = "/auto/vxr/pyvxr/latest/vxr.py start --output-dir "+new_sim_path+" ./infra/appmgr/test/etc/"+yaml
      child = pexpect.spawn(command,timeout=None)
      child.logfile = open(logfile, "wb")
   except:
@@ -378,9 +387,17 @@ def BootSpitfireSim():
      command = "sith configure --vxr"
      child = pexpect.spawn(command,timeout=None)
      flushedStuff=""
-     child = pexpect.spawn('/bin/sh -c "/auto/vxr/pyvxr/latest/vxr.py ports > ports.json"')
-     time.sleep(10)
-     fo = open('ports.json')
+     if new_sim_path == "":
+        child = pexpect.spawn('/bin/sh -c "/auto/vxr/pyvxr/latest/vxr.py ports > ports.json"')
+        time.sleep(10)
+        fo = open('ports.json')
+     else:
+        os.chdir(new_sim_path)
+        child = pexpect.spawn('/bin/sh -c "/auto/vxr/pyvxr/latest/vxr.py ports > ports.json"')
+        time.sleep(10)
+        fo = open('ports.json')
+        os.chdir("..")
+
      data = json.load(fo)
      host = data['router0']['HostAgent']
      serial0 = data['router0']['serial0']
@@ -436,6 +453,17 @@ interface HundredGigE0/0/0/1
 !
 """
 
+     if platform == "5":
+       intf_config="""
+interface HundredGigE0/0/0/0
+ ipv4 address 10.0.0.1 255.255.255.0
+ no shut
+!
+interface HundredGigE0/0/0/1
+ ipv4 address 20.0.0.1 255.255.255.0
+ no shut
+!
+"""
      cmd = cmd + intf_config
      child.sendline(cmd)
      time.sleep(3)
@@ -495,7 +523,7 @@ def checkSim(takeUserInput):
      out =""
      try:
        child1 = pexpect.spawn(command,timeout=None)
-       out = child1.expect(['\nDidn\'t find a valid','vxr-'],timeout=300)
+       out = child1.expect(['\nDidn\'t find a valid','vxr-','rch-'],timeout=300)
      except KeyboardInterrupt:
          prLightGray("\nInterrupted")
          sys.exit(0)
@@ -505,9 +533,12 @@ def checkSim(takeUserInput):
               getUserInputs()
           BootSpitfireSim()
      else:
-       if out == 1:
+       if out == 1 or out == 2:
         status = child1.read()
-        curr_status = (b'{"vxr-'+status)
+        if out == 1:
+            curr_status = (b'{"vxr-'+status)
+        if out == 2:
+            curr_status = (b'{"rch-'+status)
         decoded_string = curr_status.decode("utf-8")
         status = list(json.loads(decoded_string).values())
 
@@ -526,9 +557,15 @@ def checkSim(takeUserInput):
           print("Sim running in current ws for "+str(hours)+" hours "+str(mins)+" mins.",end ='\r')
           if (takeUserInput == True):
             relaunch = input("Kill Current Simulation and launch new Y/N?   ")
+            new_relaunch = input("Relaunch in new path Y/N?   ")
             if (relaunch == "Y"):
               getUserInputs()
               BootSpitfireSim()
+            if (new_relaunch == "Y"):
+                global new_sim_path
+                new_sim_path = input("Please provide new sim path   ")
+                getUserInputs()
+                BootSpitfireSim()
             else :
               #child = pexpect.spawn('/bin/sh -c "/auto/vxr/pyvxr/latest/vxr.py ports > ports.json"')
               #time.sleep(10)
@@ -548,7 +585,7 @@ def checkSim(takeUserInput):
               #sys.exit(0)
 
 
-     if out == 0:
+       if out == 0:
           prLightGray("VXR Sim not found.Starting again")
           if(takeUserInput == True):
               getUserInputs()
