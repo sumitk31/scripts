@@ -189,7 +189,7 @@ def getUserInputs():
       pullWorkSpaceAndBuild(platform,branch)
     routerport = "router0.HundredGigE0/0/0/0"
     if spirent_topo.upper() == 'Y':
-        cmd = """ echo "    tgn:
+        cmd = """ echo "  tgn:
         platform: spirent
         spirent_images:
            windows: /auto/vxr/images/spirent/WindowsWithTestCenter_5_38
