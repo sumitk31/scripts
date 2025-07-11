@@ -62,14 +62,14 @@ def generateGiso():
     os.system("cp img-8000/optional-rpms/healthcheck/*.rpm ./hc_sb/")
     os.system("cp img-8000/optional-rpms/sandbox/*.rpm ./hc_sb/")
     time.sleep(1)
-    child = pexpect.spawn("/auto/ioxprojects13/lindt-giso/isotools.sh --clean --iso img-8000/8000-x64.iso --label healthcheck --repo ./hc_sb/ --pkglist xr-healthcheck xr-sandbox")
+    child = pexpect.spawn("/auto/ioxprojects13/lindt-giso/gisobuild_cisco.sh --clean --iso img-8000/8000-x64.iso --label healthcheck --repo ./hc_sb/ --pkglist xr-healthcheck xr-sandbox")
     out = child.expect(['Checksums OK','The specified output dir is not empty'],timeout=1000)
     if out == 1:
       prRed("Deleting existing GISO")
       child = pexpect.spawn("rm -rf output_gisobuild/")
       time.sleep(1)
       prGreen("Generating Golden ISO")
-      child = pexpect.spawn("/auto/ioxprojects13/lindt-giso/isotools.sh --iso img-8000/8000-x64.iso --label healthcheck --repo ./hc_sb/ --pkglist xr-healthcheck xr-sandbox")
+      child = pexpect.spawn("/auto/ioxprojects13/lindt-giso/gisobuild_cisco.sh --iso img-8000/8000-x64.iso --label healthcheck --repo ./hc_sb/ --pkglist xr-healthcheck xr-sandbox")
       out = child.expect(['Checksums OK','The specified output dir is not empty'],timeout=1000)
       time.sleep(15)
 
@@ -136,6 +136,17 @@ def pullWorkSpaceAndBuild(platform,branch):
     if build_golden == "Y":
       generateGiso()
 
+def  connections_lines(fp):
+     count = 1
+     for line in fp:
+         if line.strip() == "connections:":
+             prGreen("Found connections")
+             return count-1
+         else:
+             print(line)
+             count = count + 1
+     return count 
+
 def getUserInputs():
     global yaml
     global httpport 
@@ -188,53 +199,27 @@ def getUserInputs():
     if pullws.upper() == "Y":
       pullWorkSpaceAndBuild(platform,branch)
     routerport = "router0.HundredGigE0/0/0/0"
+
+    path_to_file = "infra/appmgr/test/etc/"+yaml
+    with open(path_to_file, "r") as fp:
+      connection_index = connections_lines(fp)
+
     if spirent_topo.upper() == 'Y':
-        cmd = """ echo "  tgn:
+     value = """  tgn:
         platform: spirent
         spirent_images:
            windows: /auto/vxr/images/spirent/WindowsWithTestCenter_5_38
            api: /auto/vxr/images/spirent/Spirent_TestCenter_LabServer-5.38.img
-           port: /auto/vxr/images/spirent/sptvm-5_38.img " >>infra/appmgr/test/etc/"""+yaml
-        process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
-        process.wait()
-        if platform == "1":
-            i = pexpect.spawn("sed -i \'/hubs:/r nosi_tgen.txt' infra\/appmgr\/test\/etc\/"+yaml)
-            time.sleep(3)
-        '''
-          cmd = """ echo "
-        TGEN-1-router0:
-        - tgn.1/1
-        - router0.FourHundredGigE0/0/0/0
+           port: /auto/vxr/images/spirent/sptvm-5_38.img """
+     with open(path_to_file, "r") as fp:
+      contents = fp.readlines()
 
-        TGEN-1-R2:
-        - tgn.1/2
-        - router0.FourHundredGigE0/0/0/1"  >> infra/appmgr/test/etc/"""+yaml
+      prGreen("inserting at "+str(connection_index))
+      contents.insert(connection_index -1, value)
 
-        if platform == "2":
-          cmd = """ echo "
-connections:
-    hubs:
-        TGEN-1-router0:
-        - tgn.1/1
-        - router0.HundredGigE0/0/0/0
-
-        TGEN-1-R2:
-        - tgn.1/2
-        - router0.HundredGigE0/0/0/1"  >> infra/appmgr/test/etc/"""+yaml
-        process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
-        process.wait()
-        '''
-        '''
-        cmd = "sed -i '6i\        vxr_sim_config:' infra/appmgr/test/etc/"+yaml
-        process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
-        process.wait()
-        cmd = "sed -i '7i\          shelf:' infra/appmgr/test/etc/"+yaml
-        process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
-        process.wait()
-        cmd = "sed -i '8i\            ConfigEnableNgdp: \"True\" ' infra/appmgr/test/etc/"+yaml
-        process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
-        process.wait()
-        '''
+     with open(path_to_file, "w") as fp:
+      contents = "".join(contents)
+      fp.write(contents)
     if disable_selinux.upper() == 'Y':
         rebuild_with_selinux_disable_patch()
     if build_golden.upper() == 'Y':
@@ -430,6 +415,8 @@ def BootSpitfireSim():# new_sim_path added to allow more than on sim being launc
   !
 !
 """
+     intf_config=""
+
      if platform == "1":
        intf_config="""
 interface FourHundredGigE0/0/0/0
