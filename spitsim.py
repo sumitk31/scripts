@@ -234,8 +234,13 @@ logfile = sys.argv[1]
 def mount_nb_sf(child):
      while True:
        global password
-       child.sendline("dhclient -i eth-mgmt")
-       child.sendline("sshfs "+user+"@"+MYADS+":/nobackup/"+user+" /nb -o reconnect,ServerAliveInterval=15,ServerAliveCountMax=3 ")
+       child.sendline("dhcpcd -i eth-mgmt")
+       time.sleep(10)
+       child.sendline("scp "+user+"@"+MYADS+":/auto/tftp-blr-users4/"+user+"/alpine_python3-0.1.0-eXR_7.3.1.x86_64.rpm /harddisk:/ ")
+       #child.sendline("sshfs "+user+"@"+MYADS+":/nobackup/"+user+" /nb -o reconnect,ServerAliveInterval=15,ServerAliveCountMax=3 ")
+       #child.sendline("cp /nb/alpine_python3-0.1.0-eXR_7.3.1.x86_64.rpm /harddisk:/")
+       child.sendline("exit")
+       child.sendline("appmgr package install rpm /harddisk:/alpine_python3-0.1.0-eXR_7.3.1.x86_64.rpm")
        break
        '''
        try:
@@ -365,12 +370,12 @@ def BootSpitfireSim():# new_sim_path added to allow more than on sim being launc
   start_time=int(datetime.now().strftime('%s'))
   if (i == 0):
      prPurple('Sim UP')
-     prPurple('SITH Cleanup ongoing...')
-     command = "sith cleanup"
-     prGreen('SITH Configure ongoing...')
-     child = pexpect.spawn(command,timeout=None)
-     command = "sith configure --vxr"
-     child = pexpect.spawn(command,timeout=None)
+     #prPurple('SITH Cleanup ongoing...')
+     #command = "sith cleanup"
+     #prGreen('SITH Configure ongoing...')
+     #child = pexpect.spawn(command,timeout=None)
+     #command = "sith configure --vxr"
+     #child = pexpect.spawn(command,timeout=None)
      flushedStuff=""
      if new_sim_path == "":
         child = pexpect.spawn('/bin/sh -c "/auto/vxr/pyvxr/latest/vxr.py ports > ports.json"')
@@ -458,7 +463,7 @@ interface HundredGigE0/0/0/1
      child.sendline('end')
      #child.sendline("run ip netns exec xrnns bash")
      child.sendline("run")
-     #child.sendline("dhclient eth-mgmt")
+     #child.sendline("dhcpcd -i eth-mgmt")
      time.sleep(1)
      child.sendline("route add -host "+MYADS+" gw 192.168.122.1 eth-mgmt")
      #pdb.set_trace()
@@ -526,7 +531,8 @@ def checkSim(takeUserInput):
             curr_status = (b'{"vxr-'+status)
         if out == 2:
             curr_status = (b'{"rch-'+status)
-        decoded_string = curr_status.decode("utf-8")
+        decoded_string = curr_status.decode("utf-8", errors="ignore")
+        decoded_string = re.sub(r'[\x00-\x1f\x7f]', '', decoded_string)
         status = list(json.loads(decoded_string).values())
 
         #if status in status.decode("utf-8") or 'unknown' in status.decode("utf-8") or 'not running' in status.decode("utf-8"):
