@@ -54,6 +54,25 @@ auto_upd = ""
 branch = ""
 disable_selinux = ""
 selinux_disable_patch = "/auto/appmgr/selinux_disable_on_8k.diff"
+def _giso_golden_iso_present():
+    return len(glob.glob("output_gisobuild/giso/8000-golden*.iso")) > 0
+
+def _wait_for_giso_build(child, timeout=3600):
+    """Wait for gisobuild stdout markers (USB step is log-only DEBUG)."""
+    patterns = [
+        'GISO build successful',
+        'USB image:',
+        'Further logs at',
+        'The specified output dir is not empty',
+    ]
+    try:
+        return child.expect(patterns, timeout=timeout)
+    except pexpect.EOF:
+        if _giso_golden_iso_present():
+            prGreen("GISO build completed (golden ISO found)")
+            return 0
+        raise
+
 def generateGiso():
     child = pexpect.spawn("rm -rf ./hc_sb")
     time.sleep(1)
@@ -62,16 +81,21 @@ def generateGiso():
     os.system("cp img-8000/optional-rpms/healthcheck/*.rpm ./hc_sb/")
     os.system("cp img-8000/optional-rpms/sandbox/*.rpm ./hc_sb/")
     time.sleep(1)
-    child = pexpect.spawn("/auto/ioxprojects13/lindt-giso/gisobuild_cisco.sh --clean --iso img-8000/8000-x64.iso --label healthcheck --repo ./hc_sb/ --pkglist xr-healthcheck xr-sandbox")
-    out = child.expect(['Checksums OK','The specified output dir is not empty'],timeout=1000)
-    if out == 1:
+    giso_cmd = "/auto/ioxprojects13/lindt-giso/gisobuild_cisco.sh --clean --iso img-8000/8000-x64.iso --label healthcheck --repo ./hc_sb/ --pkglist xr-healthcheck xr-sandbox"
+    child = pexpect.spawn(giso_cmd)
+    out = _wait_for_giso_build(child)
+    if out == 3:
       prRed("Deleting existing GISO")
       child = pexpect.spawn("rm -rf output_gisobuild/")
       time.sleep(1)
       prGreen("Generating Golden ISO")
       child = pexpect.spawn("/auto/ioxprojects13/lindt-giso/gisobuild_cisco.sh --iso img-8000/8000-x64.iso --label healthcheck --repo ./hc_sb/ --pkglist xr-healthcheck xr-sandbox")
-      out = child.expect(['Checksums OK','The specified output dir is not empty'],timeout=1000)
-      time.sleep(15)
+      out = _wait_for_giso_build(child)
+    child.wait()
+    if _giso_golden_iso_present():
+      prGreen("Golden ISO ready: " + glob.glob("output_gisobuild/giso/8000-golden*.iso")[0])
+    else:
+      prRed("GISO build finished but golden ISO not found; see output_gisobuild/logs/gisobuild.log")
 
 def wait_for_file(file_path, timeout):
     start_time = time.time()
@@ -239,6 +263,7 @@ def mount_nb_sf(child):
        child.sendline("scp "+user+"@"+MYADS+":/auto/tftp-blr-users4/"+user+"/alpine_python3-0.1.0-eXR_7.3.1.x86_64.rpm /harddisk:/ ")
        #child.sendline("sshfs "+user+"@"+MYADS+":/nobackup/"+user+" /nb -o reconnect,ServerAliveInterval=15,ServerAliveCountMax=3 ")
        #child.sendline("cp /nb/alpine_python3-0.1.0-eXR_7.3.1.x86_64.rpm /harddisk:/")
+       time.sleep(30)
        child.sendline("exit")
        child.sendline("appmgr package install rpm /harddisk:/alpine_python3-0.1.0-eXR_7.3.1.x86_64.rpm")
        break
